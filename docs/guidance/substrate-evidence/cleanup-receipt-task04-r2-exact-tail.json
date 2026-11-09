@@ -1,0 +1,153 @@
+{
+  "schema": "substrate-evidence-cleanup-receipt-v1",
+  "status": "two reviewed R2 checkout children and two debug executables removed; publication and remote verification of this receipt pending",
+  "source_publication": {
+    "branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d247bac0a2c1f0a6dc5e05c1c3d91707b40f1ff7",
+    "tree": "0894592f41b700568125996e07bfd2ddad4058ca",
+    "published_r2_mapping": "records/task04-r2-proof/public/recovery.md",
+    "published_exact_tail_records": "records/task04-exact-tail/",
+    "verification": "11 published files retrieved and checked for exact ref, commit, tree, blob, mode and bytes. R2 preservation ref and full 1681-entry remote tree verified; exact-tail source commit and two source blobs retrieved and baseline source reconstructed."
+  },
+  "actions": [
+    {
+      "id": "repo-044",
+      "action": "rm -r --one-file-system -- <selected child in local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T23:06:20Z",
+      "completed_utc": "2026-11-09T23:06:45Z",
+      "exit": 0,
+      "selected_item_absent": true,
+      "identity_sha256": "6085f17686e80da04e5d5b0adc5a299ec72a6dda455c8c08d024ccd72d10de47",
+      "identity_kind": "frozen membership",
+      "allocated_regular_bytes_removed": 62119936,
+      "filesystem_available_bytes_before": 217208745984,
+      "filesystem_available_bytes_after": 217272291328,
+      "filesystem_available_inodes_before": 45672041,
+      "filesystem_available_inodes_after": 45674087,
+      "tmp_available_bytes_before": 27421229056,
+      "tmp_available_bytes_after": 27421229056,
+      "raw_action_custody": "task04:r2-exact-tail-actions/repo-044-action.txt",
+      "raw_action_sha256": "dd6ad9be748af7638435295fec719b58ae76a902b2484dbd3c24a2d69ae17d60",
+      "raw_guard_sha256": "bcc1f1c7800d1ee0a3d2cb8d59e20b5db31414f25e767e1d7e16beddb474ecc9"
+    },
+    {
+      "id": "repo-045",
+      "action": "rm -r --one-file-system -- <selected child in local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T23:06:54Z",
+      "completed_utc": "2026-11-09T23:07:26Z",
+      "exit": 0,
+      "selected_item_absent": true,
+      "identity_sha256": "99c905fd7588d1873626aacf609a30c7e7bbab342ed3d3a4caa9d06301205e33",
+      "identity_kind": "frozen membership",
+      "allocated_regular_bytes_removed": 62128128,
+      "filesystem_available_bytes_before": 217271930880,
+      "filesystem_available_bytes_after": 217335492608,
+      "filesystem_available_inodes_before": 45674055,
+      "filesystem_available_inodes_after": 45676107,
+      "tmp_available_bytes_before": 27421229056,
+      "tmp_available_bytes_after": 27421229056,
+      "raw_action_custody": "task04:r2-exact-tail-actions/repo-045-action.txt",
+      "raw_action_sha256": "d2cb4ded8becb760cfd501686b2e989505cf526a4d0a394289f63fc8087b130b",
+      "raw_guard_sha256": "bca5a064c9d01597a32710eca796b2dca8982c654b70f301d969675899e0a45a"
+    },
+    {
+      "id": "baseline",
+      "action": "rm -- <selected debug executable in local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T23:07:38Z",
+      "completed_utc": "2026-11-09T23:08:11Z",
+      "exit": 0,
+      "selected_item_absent": true,
+      "identity_sha256": "979c04378ad53f1f2cde78b79c55bc1acb3bfaf9c3247d593c689842ee2312db",
+      "identity_kind": "file content",
+      "allocated_regular_bytes_removed": 49545216,
+      "filesystem_available_bytes_before": 218321788928,
+      "filesystem_available_bytes_after": 218371334144,
+      "filesystem_available_inodes_before": 45721763,
+      "filesystem_available_inodes_after": 45721762,
+      "tmp_available_bytes_before": 27421229056,
+      "tmp_available_bytes_after": 27421229056,
+      "raw_action_custody": "task04:r2-exact-tail-actions/baseline-action.txt",
+      "raw_action_sha256": "0f5521a17396d59eea51ecdb8f31babfb289c7cdfb60ec2910f28461632d135e",
+      "raw_guard_sha256": "2568c741bdae3dcaff8a3b4ec6a9c81968fbb73f45881f8ee11e1549463fdb26"
+    },
+    {
+      "id": "candidate",
+      "action": "rm -- <selected debug executable in local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T23:08:22Z",
+      "completed_utc": "2026-11-09T23:08:51Z",
+      "exit": 0,
+      "selected_item_absent": true,
+      "identity_sha256": "1387adc6aabeb5f9b509bc1c1833de2d64d92fedb386b107655227ca0b427d6a",
+      "identity_kind": "file content",
+      "allocated_regular_bytes_removed": 49545216,
+      "filesystem_available_bytes_before": 218370912256,
+      "filesystem_available_bytes_after": 218420457472,
+      "filesystem_available_inodes_before": 45721739,
+      "filesystem_available_inodes_after": 45721738,
+      "tmp_available_bytes_before": 27421229056,
+      "tmp_available_bytes_after": 27421229056,
+      "raw_action_custody": "task04:r2-exact-tail-actions/candidate-action.txt",
+      "raw_action_sha256": "bcc2ad2d23905c38bad3d5f0ce756c2a6c002489e729ff7c292f1db257888277",
+      "raw_guard_sha256": "d648c8887131883755cfe40b1991531a03bf1005a20fa942eaf32e1c3c86b954"
+    }
+  ],
+  "total_allocated_regular_bytes_removed": 223338496,
+  "accounting": "Allocated regular bytes are frozen single-link regular blocks with selected item verified absent, excluding directory blocks; available bytes and inodes are point-in-time observations affected by concurrent activity.",
+  "checks": "Each selection had fresh remote/source verification, identity or membership, private custody and retained parent-record checks; process cwd/exe/fd/maps, mount, links, registered worktrees, and bounded protected-reference checks passed; task-allocation and free-floor checks passed, while the original overlapping du phase assertion did not measure full R. Each final guard and removal command exited zero, and all four selected items were absent on final reconciliation. R2 HEAD/index/worktree Git modes and blob IDs matched all 1681 retrieved tree entries independently before each checkout removal.",
+  "preservation": {
+    "r2_original_git_metadata": "Separate exact original Git-record archives remain in local private custody outside selections; this is not an off-host backup.",
+    "r2_private_locator": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/r2-proof-candidate/private/SHA256SUMS",
+    "r2_private_manifest_sha256": "8591cf74e08bda632d3f485003e56eb4244512fb8797c77aa7f9213c55afd026",
+    "repo_044_archive_sha256": "c9b5191f238647e6bafad6289252c9b565950e943da96678c116fb6169d3610d",
+    "repo_045_archive_sha256": "a11c76d6f2edb270e13d06b17a6ee54f121419da1b5dd82c3e71daac94631fa6",
+    "parent_records": "Parent proof and self-test records and exact-tail source/observation records remain outside the selected children/files. Hash-bound historical parent records passed postchecks; the remaining parent self-test files were present and post-action hashes captured.",
+    "historical_results": "Original supplemental baseline and candidate logs retain their recorded failed and passed outcomes; no historical binary identity or test rerun is asserted.",
+    "repo_044_archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/r2-proof-candidate/private/repo-044-git-records.tar.gz",
+    "repo_045_archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/r2-proof-candidate/private/repo-045-git-records.tar.gz",
+    "exact_tail_original_records": "/home/spenser/__Active_code/review-evidence/e3e-parent-socket-lifetime-20260916"
+  },
+  "limitations": [
+    "Six historical skill paths referenced in earlier protected material were absent and their contents were not searched.",
+    "Process, symlink and bounded reference scans are point-in-time observations; unlisted or dynamically assembled references are not excluded.",
+    "An initial R2 remote-check script invocation failed with exit 127 due to a C-relative record path; the corrected absolute-path check succeeded.",
+    "An initial postcheck-script invocation failed with exit 127 due to a C-relative record path; the corrected absolute-path postcheck succeeded.",
+    "No builds, tests, installation, service changes or provider operations were run.",
+    "The original overlapping du phase assertion measured the remainder of evidence, not full R; see the resource-accounting correction and independent complete-R snapshots."
+  ],
+  "pending": "Publication and exact remote readback of this factual receipt and index update remain pending; task and phase acceptance are separate.",
+  "remaining": "Other proof directories, parent records, release/musl, installed state, backups, source roots and protected/live/unrelated paths were not selected.",
+  "resource_accounting_correction": {
+    "original_guard_representation": "Each original combined du returned Task04 followed by R/evidence excluding Task04; the latter was not complete phase usage. Sums exclude control files outside evidence and are not exact historical full-R totals.",
+    "historical_evidence_sums_bytes": {
+      "repo-044": 498438144,
+      "repo-045": 498544640,
+      "baseline": 498667520,
+      "candidate": 498765824
+    },
+    "independent_full_R_snapshots": [
+      {
+        "time_utc": "2026-11-09T22:59:55Z",
+        "bytes": 498135040,
+        "custody": "task04:publication/current-privileged-capacity.json"
+      },
+      {
+        "time_utc": "2026-11-09T23:08:02Z",
+        "bytes": 499159040,
+        "custody": "task04:registry-source-actions/final-gate-and-action.txt"
+      }
+    ],
+    "current_full_R_measurement": {
+      "time_utc": "2026-11-09T23:13:46Z",
+      "bytes": 499478528,
+      "task04_bytes": 15290368,
+      "commands_exit": 0,
+      "stderr_empty": true,
+      "custody": "task04:r2-exact-tail-capacity-correction/summary.md"
+    },
+    "limitation": "Neither independent snapshot establishes exact full-R usage at each action instant; no safe historical upper bound is claimed."
+  }
+}

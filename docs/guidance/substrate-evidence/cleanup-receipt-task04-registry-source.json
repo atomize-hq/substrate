@@ -1,0 +1,77 @@
+{
+  "schema": "substrate-evidence-cleanup-receipt-v1",
+  "status": "666 selected expanded registry source directories removed; receipt publication and remote verification pending",
+  "source_publication": {
+    "branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "d247bac0a2c1f0a6dc5e05c1c3d91707b40f1ff7",
+    "tree": "0894592f41b700568125996e07bfd2ddad4058ca",
+    "verified_remote_files": {
+      "registry-expanded-source-catalog-task04.tsv": {
+        "sha256": "e14dfe8b29df46d918faad6a606d6382e6ea4f1c461399303cb9e43a24e1afb6",
+        "mode": "100644",
+        "blob": "cbb2a9e07a04accca6313aeed63116638b77f498"
+      },
+      "registry-expanded-source-recovery-task04.md": {
+        "sha256": "1e3cd728ee407958a6b25e9ba28cb6da77e65ca6f8c6cad72ed963f4744e722e",
+        "mode": "100644",
+        "blob": "dd9ab84b8908df30399054e653fa56417f9f069e"
+      },
+      "Cargo.lock.vendor-20260724": {
+        "sha256": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
+        "mode": "100644",
+        "blob": "92656bb52318c70d9e6ab6a53c64cc76e2d45450"
+      }
+    },
+    "verification": "Exact advertised ref, commit, tree, modes and bytes were independently retrieved from GitHub before action."
+  },
+  "action": {
+    "id": "registry-expanded-source-666",
+    "command": "xargs -0 -r -x -n 666 -s 1048576 sudo -n rm -r --one-file-system -- < selected-paths.nul",
+    "selection_custody": "task04:registry-source-candidate/selected-paths.nul",
+    "selection_sha256": "8379c8bf9ca2e8b78b1db6f577e75e7bb6a9d696e89c7bf544dfeaf0723e98d0",
+    "frozen_membership_sha256": "54c758dcc27fc6135546a8dbb8ea777e0fda7c96598ba86874285d60d6f44703",
+    "cwd": "canonical checkout",
+    "final_gate_started_utc": "2026-11-09T23:08:02Z",
+    "completed_utc": "2026-11-09T23:08:04Z",
+    "exit": 0,
+    "selected_directories": 666,
+    "verified_absent": 666,
+    "survivors": 0,
+    "allocated_regular_bytes_removed": 956899328,
+    "filesystem_available_bytes_before": 217335267328,
+    "filesystem_available_bytes_after": 218321858560,
+    "filesystem_available_inodes_before": 45676082,
+    "filesystem_available_inodes_after": 45721765,
+    "tmp_available_bytes_before": 27421229056,
+    "tmp_available_bytes_after": 27421229056,
+    "raw_action_custody": "task04:registry-source-actions/final-gate-and-action"
+  },
+  "accounting": "Frozen allocation excludes directory blocks. Filesystem free bytes and inodes include directory blocks and concurrent activity and are not the allocated-regular-file count.",
+  "preflight": "Fresh exact selection/membership/ownership, all source payload hashes and archive members, seed payloads, all 752 archives, 22 unselected source directories, index, retained records, process cwd/exe/fd/maps, scoped protected references, symlink aliases, mounts, registration, source/remote custody and complete privileged capacity guards passed before the batch.",
+  "postcheck": {
+    "selected_directories_absent": 666,
+    "retained_archive_files_hashed": 752,
+    "retained_extra_source_directories": 22,
+    "source_parent_mode": "0555",
+    "source_parent_uid_gid": "1000:1000",
+    "registry_index_files_hashed": 1602,
+    "registry_index_digest": "11d979dcdd5fcdcda8553ca42384937ecb6dd1a8ca4619b14a41bf0ddf4c9495",
+    "parent_original_files_hashed": 1277,
+    "seed_packages_checked": 667,
+    "seed_payload_files_hashed": 37896,
+    "errors": []
+  },
+  "preservation": {
+    "archive_and_seed_custody": "All original archives, seed, index, extra packages, runner, doctor binaries, parent records and protected state remain local; local custody is not an off-host backup.",
+    "restoration": "The published recovery document identifies exact archive, seed and original private record locations. Before historical offline runner or source-path debugging use, restore needed packages from their retained archives, verify hashes, restore UID/GID1000:1000 and archive mode masked with0555, set directories0555 and create the exact seven-byte Cargo marker at mode0444. The read-only parent remains0555; restoration is a separate authorized operation.",
+    "metadata": "The original immutable selected membership and 21 restrictive-mode file identities remain in protected local custody, as linked and hashed in the published recovery document."
+  },
+  "limits": [
+    "No current package-registry availability, off-host archive backup, remote recovery of every historical source commit, original binary recreation, or reproduction of historical results is claimed.",
+    "Original historical runner and retained doctor debug source-path references require restored expanded sources for relevant future offline or debugging use.",
+    "Six historical external skill files were absent during scoped reference inspection; their contents were not searched. Dynamic or unlisted references are not excluded by a point-in-time scan.",
+    "No build, product test, installation, service change or provider operation was run."
+  ],
+  "pending": "Publication and remote verification of this factual receipt and index update are pending; task and phase acceptance remain separate.",
+  "remaining": "All archive files, registry index, 22 extra source versions, seed, runner, doctor prefixes, parent records, shared Cargo/Rustup, installed state, protected/live/unrelated paths and other cohorts remain outside this action."
+}
