@@ -1,0 +1,101 @@
+{
+  "schema": "substrate-evidence-cleanup-receipt-v1",
+  "status": "four reviewed duplicate vendor children removed; publication and remote verification of this receipt pending",
+  "source_publication": {
+    "branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap",
+    "commit": "dc06858aa82c649f3d63d0bc86ff9ccbca901806",
+    "tree": "d68ede1a5c3236445785ef7caf51f1c9e2e8fbbd",
+    "verified_remote_files": {
+      "Cargo.lock.vendor-20260724": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
+      "vendor-cache-recovery-task04.md": "f5828280f0d07c8103a746f61688c846db8c34b7d4ed2471a6aa3ad3455e88e4",
+      "vendor-cache-recovery-task04-next.md": "27b49f568ba726d98177880363ebeb26de109f08f131424b1a0e78f8072e2e7d"
+    },
+    "verification": "Exact advertised ref, commit, tree paths, file modes and blob contents were retrieved from GitHub and checked before removal."
+  },
+  "actions": [
+    {
+      "id": "vendor-workspace-copy",
+      "action": "rm -r --one-file-system -- <exact selected vendor child in protected local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T21:23:12Z",
+      "completed_utc": "2026-11-09T21:23:30Z",
+      "exit": 0,
+      "selected_root_absent": true,
+      "frozen_membership_sha256": "9b69cfd3e9d97f247a5d53f72009e51c438d99cb2bca6d07d0b4e5aa0ee9af48",
+      "allocated_regular_bytes_removed": 959827968,
+      "filesystem_available_bytes_before": 197511204864,
+      "filesystem_available_bytes_after": 198500777984,
+      "filesystem_available_inodes_before": 45440373,
+      "filesystem_available_inodes_after": 45486085,
+      "raw_action_custody": "task04:a1v3-action"
+    },
+    {
+      "id": "runtime-umask-copy",
+      "action": "rm -r --one-file-system -- <exact selected vendor child in protected local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T21:23:30Z",
+      "completed_utc": "2026-11-09T21:23:50Z",
+      "exit": 0,
+      "selected_root_absent": true,
+      "frozen_membership_sha256": "a8da96a7eabcc69a7de799d7ada1fedb13065745250d4a84314f7b99596cd782",
+      "allocated_regular_bytes_removed": 959827968,
+      "filesystem_available_bytes_before": 198500175872,
+      "filesystem_available_bytes_after": 199489769472,
+      "filesystem_available_inodes_before": 45486071,
+      "filesystem_available_inodes_after": 45531783,
+      "raw_action_custody": "task04:a2v2-action"
+    },
+    {
+      "id": "stage-b-drift-copy",
+      "action": "rm -r --one-file-system -- <exact selected vendor child in protected local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T21:23:50Z",
+      "completed_utc": "2026-11-09T21:24:11Z",
+      "exit": 0,
+      "selected_root_absent": true,
+      "frozen_membership_sha256": "e31c0f930c7bad65c13545849fe1e4ae86ac4da3ac3ab0705e7a82af40b79f18",
+      "allocated_regular_bytes_removed": 959827968,
+      "filesystem_available_bytes_before": 199489622016,
+      "filesystem_available_bytes_after": 200479211520,
+      "filesystem_available_inodes_before": 45531769,
+      "filesystem_available_inodes_after": 45577481,
+      "raw_action_custody": "task04:b1v2-action"
+    },
+    {
+      "id": "runtime-spawn-umask-copy",
+      "action": "rm -r --one-file-system -- <exact selected vendor child in protected local action record>",
+      "cwd": "canonical checkout",
+      "preflight_started_utc": "2026-11-09T21:24:11Z",
+      "completed_utc": "2026-11-09T21:24:31Z",
+      "exit": 0,
+      "selected_root_absent": true,
+      "frozen_membership_sha256": "3e62441ee36cee28952bbe5059bc3a2f96dcb2bdcd763c58a043c974952af43c",
+      "allocated_regular_bytes_removed": 959827968,
+      "filesystem_available_bytes_before": 200479100928,
+      "filesystem_available_bytes_after": 201468608512,
+      "filesystem_available_inodes_before": 45577469,
+      "filesystem_available_inodes_after": 45623180,
+      "raw_action_custody": "task04:b2v2-action"
+    }
+  ],
+  "total_allocated_regular_bytes_removed": 3839311872,
+  "accounting": "Each frozen root had 38,563 single-link regular files and 7,150 directories. Allocated regular bytes exclude directory blocks and are not df gains. Filesystem free bytes and inodes are observations affected by directory blocks and concurrent activity.",
+  "checks": "Each child had fresh frozen membership and seed byte-equivalence, process cwd/exe/fd/maps, mount/link, scoped protected reference and symlink alias, source/remote publication, protected state and capacity checks before its removal; each command exited zero, each root was absent immediately after and on final reconciliation.",
+  "preservation": {
+    "seed": "task04:retained-local-seed-vendor",
+    "post_removal_seed_verification": "667 crate manifests and 37,896 files checked against package and file checksums; zero errors.",
+    "seed_custody": "The retained seed is local custody, not an off-host backup.",
+    "offline_restoration": "The retained historical Cargo configurations use .cargo/vendor and offline mode. Before a later offline invocation in an affected parent, restore its vendor directory from the retained byte-identical seed at the exact parent location documented in the private action record.",
+    "other_records": "Source repository, parent configurations, logs, protected actor and World/Lane and Task20 records were not selected and remain held."
+  },
+  "limitations": [
+    "Remote recovery of historical substrate commit 4cfcabf9d00e20c26bae71618563635e1e0afb61 has not been established; its independent source repository remains held.",
+    "Crates.io package availability, historical native binaries and reproduction of original build results are not established.",
+    "Six historical skill paths referenced by prior protected material were absent during scoped inspection; their missing contents were not searched.",
+    "Scoped process and reference scans are point-in-time observations; dynamically generated or unlisted references are not excluded.",
+    "No builds, product tests, installation, service changes or provider operations were run."
+  ],
+  "earlier_preflights": "The first preflight stopped before any removal because ripgrep produced the same seven paths in a different order; a sorted set and matching original-file hashes confirmed equivalence. A revised preflight was interrupted before removal to verify linked install-unit target correspondence. Both are retained in local evidence.",
+  "pending": "Publication and exact remote readback of this factual receipt and index update remain pending; task and phase acceptance are separate.",
+  "remaining": "Other loose/cache roots, source repositories, installed state, backups, registered worktrees and protected/live/unrelated paths were not selected by this batch and require their own applicable disposition."
+}
