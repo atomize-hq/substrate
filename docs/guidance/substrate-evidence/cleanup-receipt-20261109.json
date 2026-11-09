@@ -1,0 +1,289 @@
+{
+  "schema": "substrate-evidence-cleanup-receipt-v1",
+  "status": "actual partial B1 and B2 cleanup; receipt publication and verification are separate",
+  "source_baseline_commit": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+  "preservation_commit": "c8293743002368455195e2364ec5dabe60d8678e",
+  "preservation_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "preservation_tree": "99b7e329d4d9baee8125984e84780f501d6c00e5",
+  "preservation_verification": "Direct GitHub ref and per-file content retrieval succeeded before each action and again after cleanup. The 16 package files were retrieved at the exact preservation commit; the 3 source inputs were retrieved at the exact source baseline. Baseline ancestry to the preservation commit was verified separately.",
+  "remote_content_command_template": "gh api repos/atomize-hq/substrate/contents/<listed-path>?ref=<listed-ref>",
+  "remote_file_sha256": [
+    {
+      "path": "docs/guidance/substrate-evidence/README.md",
+      "expected_sha256": "dad12a6eddb669550e8b85cc859d4bc54ae856e02e60a54af085a43097ce94f9",
+      "retrieved_sha256": "dad12a6eddb669550e8b85cc859d4bc54ae856e02e60a54af085a43097ce94f9",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/inventory-index.json",
+      "expected_sha256": "9269d51c59a95f6a3ebf77d84192485c6099890f48931054c344e69e4558a8ec",
+      "retrieved_sha256": "9269d51c59a95f6a3ebf77d84192485c6099890f48931054c344e69e4558a8ec",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/manifest.json",
+      "expected_sha256": "efe2616432a166235766bcbc31d539c9d52a37209e86875fd550fa11abb0d7f6",
+      "retrieved_sha256": "efe2616432a166235766bcbc31d539c9d52a37209e86875fd550fa11abb0d7f6",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/receipt-template.md",
+      "expected_sha256": "af43dfdfb6415378c982c59558fe4946db383991c8391521a214bbb1cc6f0989",
+      "retrieved_sha256": "af43dfdfb6415378c982c59558fe4946db383991c8391521a214bbb1cc6f0989",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/audit-measurement-errors.txt",
+      "expected_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retrieved_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/audit-measurement.tsv",
+      "expected_sha256": "b19a99641406b72edc595ba8fef70b92e2f11cf8c69b75b5f9f23cef4c3222a5",
+      "retrieved_sha256": "b19a99641406b72edc595ba8fef70b92e2f11cf8c69b75b5f9f23cef4c3222a5",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/implementation-discovery.md",
+      "expected_sha256": "ce69f0098148d506915d19bb2ac705a7fa50dc02b8cb46340c939f80f0b9bdd0",
+      "retrieved_sha256": "ce69f0098148d506915d19bb2ac705a7fa50dc02b8cb46340c939f80f0b9bdd0",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/prior-audit-incremental.json",
+      "expected_sha256": "d0d2151005f530f6a6cb8022ddda1babcf3e7781165569f28258befaf3522dca",
+      "retrieved_sha256": "d0d2151005f530f6a6cb8022ddda1babcf3e7781165569f28258befaf3522dca",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/prior-audit-reclaim.json",
+      "expected_sha256": "3de1b453b6851934d2c057284bde0b1884b953ae003f9a9ed655cd21076e9a6b",
+      "retrieved_sha256": "3de1b453b6851934d2c057284bde0b1884b953ae003f9a9ed655cd21076e9a6b",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/r2-base-inventory.stderr.txt.stderr.txt",
+      "expected_sha256": "d34cf00a4292e6b7803dd97890a81b57850898e1d27c0f5e3ad277c9ba90075e",
+      "retrieved_sha256": "d34cf00a4292e6b7803dd97890a81b57850898e1d27c0f5e3ad277c9ba90075e",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/r2-base-inventory.test_names.txt.test_names.txt",
+      "expected_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+      "retrieved_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/r2-base-selftest.stderr.txt.stderr.txt",
+      "expected_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+      "retrieved_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/r2-head-inventory.stderr.txt.stderr.txt",
+      "expected_sha256": "a7caf88ea1f00a3e5e8e83a29378fc5efb24578cc1a4bd9c986088ff9f51e72b",
+      "retrieved_sha256": "a7caf88ea1f00a3e5e8e83a29378fc5efb24578cc1a4bd9c986088ff9f51e72b",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/r2-head-inventory.test_names.txt.test_names.txt",
+      "expected_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+      "retrieved_sha256": "651e6b5509d928185e4de76eaae00c290110926265b9ca66297a4d050261f33f",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/r2-head-selftest.stderr.txt.stderr.txt",
+      "expected_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+      "retrieved_sha256": "0d0d89ddd904e6d16a663c3237076649517adeca0ecf7d88fd341e6a3aa4af7d",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "docs/guidance/substrate-evidence/records/strategic-discovery.md",
+      "expected_sha256": "6c4b3d8575d9ab850c621e726cce94cdb6ecdb1c12e27e4e07cdd0d159d933fb",
+      "retrieved_sha256": "6c4b3d8575d9ab850c621e726cce94cdb6ecdb1c12e27e4e07cdd0d159d933fb",
+      "ref": "c8293743002368455195e2364ec5dabe60d8678e"
+    },
+    {
+      "path": "Cargo.lock",
+      "expected_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467",
+      "retrieved_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467",
+      "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0"
+    },
+    {
+      "path": "Cargo.toml",
+      "expected_sha256": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34",
+      "retrieved_sha256": "b2a5f3b2862bbf3811ee0d522ba8f6e959a4ca519f8a0e4bae8185534ddc5e34",
+      "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "expected_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8",
+      "retrieved_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8",
+      "ref": "3dda500a630e7ab92186788b9a0641dc84a788b0"
+    }
+  ],
+  "post_cleanup_remote_verification": {
+    "custody": "cleanup-20261109:post-cleanup-remote-verification",
+    "sha256": "a2863ea3d92cac7c6372a69ee01f9704a252d691f174d17d7baaf1fa5b859604"
+  },
+  "script_sha256": "bbdc9784c46b191f7bee4955acafca0e340a4b614645dc25e74b3e1f86278531",
+  "command_template": "sudo -n python3 <custody:reviewed-script> <B1-or-B2> --frozen <custody:frozen-preflight> --gate <custody:owner-gate> --receipt <custody:action-receipt> --execute",
+  "command_cwd": "canonical checkout",
+  "batches": [
+    {
+      "batch": "B1",
+      "start_utc": "2026-11-09T16:27:35.519068+00:00",
+      "end_utc": "2026-11-09T16:30:32.455768+00:00",
+      "selected_scope": "canonical target/debug/incremental conventional compiler cache files",
+      "selection_custody": "cleanup-20261109:B1:exact-selected-and-held-inodes",
+      "selected_and_removed_files": 19881,
+      "held_entries_in_scanned_subset": 1959,
+      "expected_allocated_bytes": 10740436992,
+      "actual_unlinked_allocated_bytes": 10740436992,
+      "available_bytes_before": 118301573120,
+      "available_bytes_after": 128692441088,
+      "available_bytes_change": 10390867968,
+      "available_inodes_before": 45194438,
+      "available_inodes_after": 45214314,
+      "action_exit": 0,
+      "action_stdout_empty": true,
+      "action_stderr_empty": true,
+      "raw_action_receipt": {
+        "custody": "cleanup-20261109:B1:action",
+        "sha256": "33cd5d749af51d605e7294fb4fcf333f83de87f1982ae30070977469b91e2ec8"
+      },
+      "raw_action_journal": {
+        "custody": "cleanup-20261109:B1:journal",
+        "sha256": "408ebea037c3edc0dc039f61bbd82a17bd7c5f76cbbe9e38cd83b76ce07c8121"
+      },
+      "command_receipt": {
+        "custody": "cleanup-20261109:B1:command",
+        "sha256": "25bae75f67c4aa0f8115780cb9adb090480890295da9c84ea57e38b70c0f4cd9"
+      },
+      "preflight_receipt": {
+        "custody": "cleanup-20261109:B1:preflight",
+        "sha256": "68287c33e99576c9526bc8fa3e3dcdbbf970f67533d531f20336d9baf8c9cd62"
+      },
+      "frozen_preflight_sha256": "ffe5d601947cc59f3caa24ef415e8036f27ec942b51c1c32e6e307fadf88007c",
+      "checks_passed": [
+        "frozen_subject_matches",
+        "clean_C",
+        "C_HEAD",
+        "baseline_ancestor",
+        "protected_files_match",
+        "actor_match",
+        "W_state",
+        "original_records_match",
+        "kept_generated_and_source_inputs",
+        "B2_dependency_inputs_present",
+        "reference_scan_complete",
+        "no_selected_persistent_refs",
+        "known_links_clear",
+        "installation_refs_clear",
+        "mount_fence_clear",
+        "storage_caps_and_floors",
+        "remote_correspondence",
+        "fresh_preflight"
+      ],
+      "process_hits": 0,
+      "process_scan_errors": 0,
+      "failed_paths": 0,
+      "selected_files_with_allocated_bytes_less_than_apparent_size": 0
+    },
+    {
+      "batch": "B2",
+      "start_utc": "2026-11-09T16:34:02.577079+00:00",
+      "end_utc": "2026-11-09T16:34:11.210413+00:00",
+      "selected_scope": "canonical target/debug/deps matching Cargo library archives and metadata",
+      "selection_custody": "cleanup-20261109:B2:exact-selected-and-held-inodes",
+      "selected_and_removed_files": 932,
+      "held_entries_in_scanned_subset": 4973,
+      "expected_allocated_bytes": 1527476224,
+      "actual_unlinked_allocated_bytes": 1527476224,
+      "available_bytes_before": 128300761088,
+      "available_bytes_after": 129826959360,
+      "available_bytes_change": 1526198272,
+      "available_inodes_before": 45206464,
+      "available_inodes_after": 45207394,
+      "action_exit": 0,
+      "action_stdout_empty": true,
+      "action_stderr_empty": true,
+      "raw_action_receipt": {
+        "custody": "cleanup-20261109:B2:action",
+        "sha256": "186911ce27eb5ce6e266e87151776ce22c298504547227a012560ff7d3856281"
+      },
+      "raw_action_journal": {
+        "custody": "cleanup-20261109:B2:journal",
+        "sha256": "013ea70b989006cb27951d4624ab9bedb6ecde4a62a67ba9105391eed18e755a"
+      },
+      "command_receipt": {
+        "custody": "cleanup-20261109:B2:command",
+        "sha256": "b7381bdcddad2ecd4a2639558646902a11ed4ce2965985d3f4fdb56e0d3f3ed9"
+      },
+      "preflight_receipt": {
+        "custody": "cleanup-20261109:B2:preflight",
+        "sha256": "c20777b34471cc1711ea1e00e1f290ffb8180b27b1bfc751a72c06a92578127f"
+      },
+      "frozen_preflight_sha256": "c9c8022489f43144fb2a13d64c0c50847fa1d26330eda0cad99e683c7027b90c",
+      "checks_passed": [
+        "frozen_subject_matches",
+        "clean_C",
+        "C_HEAD",
+        "baseline_ancestor",
+        "protected_files_match",
+        "actor_match",
+        "W_state",
+        "original_records_match",
+        "kept_generated_and_source_inputs",
+        "B2_dependency_inputs_present",
+        "reference_scan_complete",
+        "no_selected_persistent_refs",
+        "known_links_clear",
+        "installation_refs_clear",
+        "mount_fence_clear",
+        "storage_caps_and_floors",
+        "remote_correspondence",
+        "fresh_preflight"
+      ],
+      "process_hits": 0,
+      "process_scan_errors": 0,
+      "failed_paths": 0,
+      "selected_files_with_allocated_bytes_less_than_apparent_size": 0
+    }
+  ],
+  "nonoverlap_removed_files": 20813,
+  "nonoverlap_unlinked_allocated_bytes": 12267913216,
+  "sum_per_action_available_bytes_changes": 11917066240,
+  "postcheck_utc": "2026-11-09T16:36:29.350682+00:00",
+  "postcheck_available_bytes": 129274417152,
+  "postcheck_available_inodes": 45205792,
+  "overall_available_bytes_change_since_first_action": 10972844032,
+  "accounting_note": "Unlinked allocated bytes, the sum of per-action filesystem free-space changes, and overall free capacity change are distinct. Concurrent allocation and inode churn occurred; no exclusive global attribution is claimed. Directory blocks are not counted as unlinked file allocation.",
+  "postcheck": {
+    "all_selected_absent": true,
+    "all_held_present": true,
+    "journals_match": true,
+    "cross_batch_inode_overlap": 0,
+    "process_hits": 0,
+    "process_scan_errors": 0,
+    "protected_hash_changes": 0,
+    "actor_sha256": "565e2033a089dcbb48e1e4da9b28bea19fed9510918ef46b7f9c64afef3c9d62",
+    "actor_hash_matches": true,
+    "kept_input_hash_changes": 0,
+    "original_record_hash_changes": 0,
+    "canonical_checkout_status": "clean at postcheck before this receipt update",
+    "integration_checkout_status": "only its pre-existing BACKLOG edit at postcheck",
+    "reconciliation_custody": "cleanup-20261109:post-cleanup-reconciliation",
+    "reconciliation_sha256": "33538cc01c60bf466eedc4109f122acede720e9401448e517bf7e89ae2df5747"
+  },
+  "limits_and_holds": [
+    "B1 Cargo locks and multiply-linked files remain.",
+    "Most remaining B2 debug outputs, generated or otherwise unselected content, and unresolved dependencies remain for later assessment; selection rules are not permanent retention decisions.",
+    "B3 through B7, other worktrees and loose roots, release outputs, shared Cargo state, backups, installed files and protected/private custody remain outside this cleanup.",
+    "Raw exact selected and held paths, command arguments and journals remain in local private custody. Opaque references and hashes do not constitute an off-machine backup.",
+    "Product builds and Rust tests were not run; they were not required for this cleanup.",
+    "No cleanup action failed; historical incomplete observations, unavailable lock hashes and failed Git probes remain as recorded in the index."
+  ],
+  "resource_limits": "Pre-action checks passed the 24 GiB persistent, 2 GiB temporary and 512 MiB proof caps and applicable 16 GiB and 8 GiB free-space floors. No full artifact backup was created."
+}

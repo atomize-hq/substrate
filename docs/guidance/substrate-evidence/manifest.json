@@ -1,6 +1,6 @@
 {
   "schema": "substrate-evidence-v1",
-  "status": "review candidate; remote publication and cleanup pending",
+  "status": "initial package published and verified; partial B1/B2 cleanup performed; receipt publication and verification are separate",
   "records": [
     {
       "id": "audit-measurement",

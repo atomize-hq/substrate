@@ -3830,7 +3830,8 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "partial B2 cleanup performed; remaining debug contents held pending subset-specific assessment",
+      "cleanup_receipt": "cleanup-receipt-20261109.json"
     },
     {
       "id": "inventory-383",
@@ -3840,7 +3841,8 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "partial B1 cleanup performed; remaining incremental locks and multiply-linked files held pending assessment",
+      "cleanup_receipt": "cleanup-receipt-20261109.json"
     },
     {
       "id": "inventory-384",
