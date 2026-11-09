@@ -1,0 +1,68 @@
+[
+  {
+    "variant": "baseline",
+    "source_sha256": "c481b4762e61f9c4e7828515579799e204bc63cf7cd665f3a4e6b089f66b5d29",
+    "wrapper_sha256": "2a68ac1ea46001017764e7e26dd406df7de4854e27110bcc59a68665f24afaa5",
+    "harness_sha256": "eed50fde900dc196b7e8db5022fe85bcadde5e20a9b7fe1d41d4ff5a6356bc4e",
+    "argv": [
+      "rustup",
+      "run",
+      "1.89.0",
+      "rustc",
+      "--edition=2021",
+      "--test",
+      "--crate-name",
+      "socket_lifetime_exact_tail",
+      "/home/spenser/__Active_code/review-evidence/e3e-parent-socket-lifetime-20260916/baseline-exact-tail.rs",
+      "-L",
+      "dependency=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps",
+      "-o",
+      "/home/spenser/__Active_code/review-evidence/e3e-parent-socket-lifetime-20260916/baseline-exact-tail",
+      "--extern",
+      "anyhow=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libanyhow-a9f9e5309d9eb34d.rlib",
+      "--extern",
+      "libc=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/liblibc-221de7eab1f965f1.rlib",
+      "--extern",
+      "config_projection=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libconfig_projection-5e37bbb8f9ab5c9f.rlib"
+    ],
+    "dependencies": {
+      "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libanyhow-a9f9e5309d9eb34d.rlib": "cc6a1d74116452e8b350e27be8e331f4536cbf7e60ce093601e227012371450e",
+      "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/liblibc-221de7eab1f965f1.rlib": "2edd77ec60655c6066c1e2a225af46555f8efc8b3b83947ad1b6220620747812",
+      "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libconfig_projection-5e37bbb8f9ab5c9f.rlib": "d4fae9ffece4d40467cccd7d97f839d51890b33208adf3ef1142811558658d42"
+    },
+    "exit_code": 101
+  },
+  {
+    "variant": "candidate",
+    "source_sha256": "60a887ca37a4aed9ce65e2deeca54aa4e0beb514ace6078796da47f5fd6c2fa2",
+    "wrapper_sha256": "2a68ac1ea46001017764e7e26dd406df7de4854e27110bcc59a68665f24afaa5",
+    "harness_sha256": "0375dcc2dcc36d9494eb7355c7b22409232156d2c228c36c7dca248a140c82e1",
+    "argv": [
+      "rustup",
+      "run",
+      "1.89.0",
+      "rustc",
+      "--edition=2021",
+      "--test",
+      "--crate-name",
+      "socket_lifetime_exact_tail",
+      "/home/spenser/__Active_code/review-evidence/e3e-parent-socket-lifetime-20260916/candidate-exact-tail.rs",
+      "-L",
+      "dependency=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps",
+      "-o",
+      "/home/spenser/__Active_code/review-evidence/e3e-parent-socket-lifetime-20260916/candidate-exact-tail",
+      "--extern",
+      "anyhow=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libanyhow-a9f9e5309d9eb34d.rlib",
+      "--extern",
+      "libc=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/liblibc-221de7eab1f965f1.rlib",
+      "--extern",
+      "config_projection=/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libconfig_projection-5e37bbb8f9ab5c9f.rlib"
+    ],
+    "dependencies": {
+      "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libanyhow-a9f9e5309d9eb34d.rlib": "cc6a1d74116452e8b350e27be8e331f4536cbf7e60ce093601e227012371450e",
+      "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/liblibc-221de7eab1f965f1.rlib": "2edd77ec60655c6066c1e2a225af46555f8efc8b3b83947ad1b6220620747812",
+      "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-e2-rm-receipt-material-projection/target/debug/deps/libconfig_projection-5e37bbb8f9ab5c9f.rlib": "d4fae9ffece4d40467cccd7d97f839d51890b33208adf3ef1142811558658d42"
+    },
+    "exit_code": 0
+  }
+]

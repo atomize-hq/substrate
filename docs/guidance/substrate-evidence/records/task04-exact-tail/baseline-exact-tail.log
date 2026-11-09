@@ -1,0 +1,17 @@
+
+running 1 test
+gateway: parent=Err(Malformed); receiver=Err(duplicate, trailing, or closed wrapper release channel)
+probe: parent=Err(Malformed); receiver=Err(duplicate, trailing, or closed wrapper release channel)
+
+thread 'both_production_parent_tails_with_actual_receiver' panicked at /home/spenser/__Active_code/review-evidence/e3e-parent-socket-lifetime-20260916/baseline-exact-tail.rs:135:2:
+failed startup paths: ["gateway", "probe"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test both_production_parent_tails_with_actual_receiver ... FAILED
+
+failures:
+
+failures:
+    both_production_parent_tails_with_actual_receiver
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,7 @@
+# R2 proof checkout recovery: repo-044 and repo-045
+
+Both checkouts used commit `199e1b1a5f3854934a08727f2846e028c065c5cb`, tree `15e17d17fa1a9222488a695a0e4e360376e3556c`, with parent `ec05167bd7bcb7be874af48fe33d6edb71492516`. This exact commit was advertised at `refs/heads/feat/preserve-task03-r2-head-199e1b1a` and returned by the GitHub commit API at preparation. The existing `docs/guidance/substrate-evidence/priority-recovery-task03.md` describes the Task03 source recovery and its separately published original result records.
+
+Fetch the preservation branch in a new checkout and verify the exact commit, tree, source files and Git modes. The two original checkouts had clean tracked, untracked and ignored states. repo-044 used detached HEAD; repo-045 used the local feature branch. Their distinct original Git configuration, refs and reflogs remain in protected local private custody. Local private custody is not an off-host backup. The selected checkout paths are children of larger proof directories; their parent self-test and evidence records are outside this selection and remain in place.
+
+No source patch, original-binary equivalence, historical test rerun, or new product acceptance is implied. Verify the current remote branch and this mapping's exact bytes before using it. `public/SHA256SUMS` is relative to the parent directory of `public/`; retain that layout when publishing and verifying.

@@ -1,0 +1,28 @@
+--- gateway_runtime.rs
++++ gateway_runtime.rs
+@@ -838,11 +838,10 @@
+                 .context("E3 setup lacks retained registration")?,
+             &owned.enforcement.user_namespace_requirement,
+         )?;
++        drop(userns_parent);
+         let bytes = Launch::e3_read_bounded(setup_reader.as_raw_fd(), &deadline)?;
+         drop(setup_reader);
+         owned.security = Some(ConfigProjectionCodecV1::decode_canonical_json(&bytes)?);
+-        // Setup-ready proves the child has passed the mapped-release trailing-data check.
+-        drop(userns_parent);
+         self.validate_child_security()?;
+         authenticate()?;
+         Launch::e3_remaining_ms(&deadline)?;
+@@ -1428,11 +1427,10 @@
+                 .context("E3 setup lacks retained registration")?,
+             &probe.enforcement.user_namespace_requirement,
+         )?;
++        drop(userns_parent);
+         let bytes = Launch::e3_read_bounded(setup_reader.as_raw_fd(), &deadline)?;
+         drop(setup_reader);
+         probe.security = Some(ConfigProjectionCodecV1::decode_canonical_json(&bytes)?);
+-        // Setup-ready proves the child has passed the mapped-release trailing-data check.
+-        drop(userns_parent);
+         self.validate_readiness_probe()
+     }
+ 
