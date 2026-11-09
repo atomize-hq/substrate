@@ -1,0 +1,1312 @@
+diff --git a/crates/shell/src/repl/async_repl.rs b/crates/shell/src/repl/async_repl.rs
+index 6948049ff21111f2bde67b5b6b4e776a3011f712..1c2b96e997c580f63326a5fc255f4775c3bab8f2 100644
+--- a/crates/shell/src/repl/async_repl.rs
++++ b/crates/shell/src/repl/async_repl.rs
+@@ -15,6 +15,8 @@ use std::thread;
+ use std::time::{Duration, Instant};
+ 
+ use anyhow::{anyhow, Context, Result};
++#[cfg(target_os = "linux")]
++use clap::Parser as _;
+ use futures::{pin_mut, FutureExt, StreamExt};
+ use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
+ use serde::Deserialize;
+@@ -59,16 +61,19 @@ use crate::execution::agent_runtime::control::{
+     register_private_stop_transport, runtime_controls_parent_session, runtime_is_terminal,
+     runtime_stop_transport_ids, spawn_local_private_cancel_owner, spawn_local_private_prompt_owner,
+     spawn_local_private_stop_owner, submit_host_prompt_turn, toolbox_transport_path,
+-    AuthorityManagedStopAcceptanceV1, HiddenOwnerHelperLaunchPlan, OwnerHelperMode,
+-    PersistedWorldBinding, PrivateCancelRequestReceiver, PrivateCancelTransport,
+-    PrivatePromptTransport, PrivateStopOutcome, PrivateStopRequestPayloadV1,
+-    PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction, PublicPromptEnvelope,
+-    PublicSessionPosture, ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent,
+-    AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
++    AuthorityManagedStopAcceptanceV1, HiddenOwnerHelperLaunchPlan,
++    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
++    HiddenOwnerHelperStartupPromptPlan, OwnerHelperMode, PersistedWorldBinding,
++    PrivateCancelRequestReceiver, PrivateCancelTransport, PrivatePromptTransport,
++    PrivateStopOutcome, PrivateStopRequestPayloadV1, PrivateStopRequestReceiver,
++    PrivateStopTransport, PublicPromptAction, PublicPromptEnvelope, PublicSessionPosture,
++    ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1,
++    AGENT_API_TURN_LIFECYCLE_V1,
+ };
+ #[cfg(target_os = "linux")]
+ use crate::execution::agent_runtime::control::{
+-    discover_toolbox_episode_transport, host_execution_episode_for_current_authority,
++    consume_hidden_owner_helper_startup_prompt_stream, discover_toolbox_episode_transport,
++    host_execution_episode_for_current_authority, register_durable_start_startup_prompt_listener,
+     validate_host_execution_episode_against_current_hsa, EpisodeExitObservationV1,
+     HostExecutionEpisodeBindingV1, HostExecutionEpisodeKindV1, HostExecutionEpisodeObservationV1,
+     HostExecutionEpisodeObserverV1, HostExecutionEpisodeV1, PrivateTransportAvailabilityV1,
+@@ -120,7 +125,9 @@ use crate::execution::agent_runtime::host_session_authority::{
+ };
+ use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+ use crate::execution::agent_runtime::obligation_ledger::{
+-    read_exact_start_obligation_ledger_snapshot, ObligationLedgerSnapshotReadV1,
++    read_exact_start_obligation_ledger_snapshot, ObligationAttentionDispositionV1,
++    ObligationLedgerSnapshotReadV1, ObligationMaterializationCutV1, ObligationSnapshotHashInputV1,
++    SupervisorJournalEventRefV1,
+ };
+ use crate::execution::agent_runtime::orchestration_session::{
+     HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
+@@ -132,7 +139,9 @@ use crate::execution::agent_runtime::retained_worker_runtime::{
+ #[cfg(target_os = "linux")]
+ use crate::execution::agent_runtime::session::AgentRuntimeForkParticipantInit;
+ use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
+-use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
++use crate::execution::agent_runtime::state_store::{
++    valid_detached_host_continuity_posture, AcceptedWorldWorkIdentityV1,
++};
+ #[cfg(target_os = "linux")]
+ use crate::execution::agent_runtime::tool_invocation_contract::HostToolNameV1;
+ use crate::execution::agent_runtime::tool_invocation_contract::{
+@@ -1871,6 +1880,192 @@ struct RuntimeOrchestrationContext {
+     intended_host_principal: Option<PlatformPrincipalV1>,
+ }
+ 
++#[cfg(target_os = "linux")]
++#[derive(Clone, Debug, Eq, PartialEq)]
++struct AuthorityManagedTargetedTurnIdentity {
++    orchestration_session_id: String,
++    backend_id: String,
++    world_bound: bool,
++}
++
++#[cfg(target_os = "linux")]
++fn authority_managed_targeted_turn_identity(
++    startup_context: &RuntimeOrchestrationContext,
++) -> Option<AuthorityManagedTargetedTurnIdentity> {
++    let RuntimeAuthorityContext::Bound(current) = &startup_context.authority else {
++        return None;
++    };
++    Some(AuthorityManagedTargetedTurnIdentity {
++        orchestration_session_id: current.authority.orchestration_session_id.clone(),
++        backend_id: current.caller.descriptor.backend_id.clone(),
++        world_bound: current.authority.world_binding.is_some(),
++    })
++}
++
++#[cfg(target_os = "linux")]
++async fn submit_authority_managed_host_targeted_turn(
++    identity: AuthorityManagedTargetedTurnIdentity,
++    prompt: &str,
++) -> Result<()> {
++    let prompt = prompt.to_string();
++    let exit_code = task::spawn_blocking(move || -> Result<i32> {
++        let world_flag = if identity.world_bound {
++            "--world"
++        } else {
++            "--no-world"
++        };
++        let cli = crate::execution::Cli::try_parse_from(["substrate", world_flag])
++            .context("build authority-managed targeted Turn invocation")?;
++        let command = crate::execution::AgentCmd {
++            action: crate::execution::AgentAction::Turn(crate::execution::AgentTurnArgs {
++                session: identity.orchestration_session_id,
++                backend: identity.backend_id,
++                prompt_source: crate::execution::PublicPromptArgs {
++                    prompt: Some(prompt),
++                    prompt_file: None,
++                },
++                json: false,
++            }),
++        };
++        let install_context =
++            crate::execution::install_bootstrap::checked_install_bootstrap_context_from_projections(
++            )
++            .context("load authority-managed targeted Turn install context")?;
++        Ok(crate::execution::handle_agent_command(
++            &command,
++            &cli,
++            &install_context,
++        ))
++    })
++    .await
++    .context("join authority-managed targeted Turn controller")??;
++    if exit_code != 0 {
++        anyhow::bail!(
++            "substrate: error: authority-managed targeted Turn exited with status {exit_code}"
++        );
++    }
++    Ok(())
++}
++
++#[cfg(target_os = "linux")]
++async fn start_authority_managed_targeted_runtime(
++    prepared: PreparedAgentRuntime,
++    initial_world_binding: Option<&PersistedWorldBinding>,
++    prompt: &str,
++    startup_toolbox_request_tx: &InternalToolboxDispatchRequestSender,
++    agent_printer: &ReplPrinter,
++    telemetry: &mut ReplSessionTelemetry,
++) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
++    let orchestration_session_id = prepared.startup_context.orchestration_session_id();
++    let participant_id = prepared
++        .manifest
++        .lock()
++        .expect("prepared runtime manifest mutex poisoned")
++        .handle
++        .participant_id
++        .clone();
++    let listener =
++        register_durable_start_startup_prompt_listener(&orchestration_session_id, &participant_id)
++            .map_err(|error| RuntimeBootstrapFailure {
++                exit_code: 1,
++                message: format!(
++                    "failed to register targeted HSA Start lifecycle stream: {error:#}"
++                ),
++            })?;
++    let stream_path = listener.path().to_path_buf();
++    let startup = start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
++        Some(prepared),
++        initial_world_binding,
++        Some(InitialExecPromptPlan::StartupPrompt {
++            prompt: prompt.to_string(),
++            stream_path,
++        }),
++        false,
++        true,
++        true,
++        Some(startup_toolbox_request_tx),
++        None,
++        agent_printer,
++        telemetry,
++    );
++    let lifecycle = consume_hidden_owner_helper_startup_prompt_stream(listener, |_| Ok(()));
++    let (runtime, lifecycle) = tokio::join!(startup, lifecycle);
++    let runtime = runtime?;
++    let lifecycle_exit_code = lifecycle.map_err(|error| RuntimeBootstrapFailure {
++        exit_code: 1,
++        message: format!("targeted HSA Start lifecycle stream failed: {error:#}"),
++    })?;
++    if lifecycle_exit_code != 0 {
++        return Err(RuntimeBootstrapFailure {
++            exit_code: lifecycle_exit_code,
++            message: format!(
++                "targeted HSA Start lifecycle stream exited with status {lifecycle_exit_code}"
++            ),
++        });
++    }
++    if let Some(runtime) = runtime {
++        retire_authority_managed_targeted_runtime(runtime).await;
++    }
++    Ok(None)
++}
++
++#[cfg(target_os = "linux")]
++async fn retire_authority_managed_targeted_runtime(mut runtime: AsyncReplAgentRuntime) {
++    runtime.shutdown_requested.store(true, Ordering::SeqCst);
++    runtime
++        .host_toolbox_surface_authoritative
++        .store(false, Ordering::SeqCst);
++
++    if let Some(mut cancel_transport) = runtime.cancel_transport.take() {
++        cancel_transport.close().await;
++    }
++    if let Some(task) = runtime.cancel_owner_task.take() {
++        task.abort();
++        let _ = task.await;
++    }
++    if let Some(mut stop_transport) = runtime.stop_transport.take() {
++        stop_transport.close().await;
++    }
++    if let Some(task) = runtime.stop_owner_task.take() {
++        task.abort();
++        let _ = task.await;
++    }
++    if let Some(mut prompt_transport) = runtime.prompt_transport.take() {
++        prompt_transport.close().await;
++    }
++    if let Some(task) = runtime.prompt_owner_task.take() {
++        task.abort();
++        let _ = task.await;
++    }
++    if let Some(mut toolbox_transport) = runtime.toolbox_transport.take() {
++        toolbox_transport.close().await;
++    }
++    if let Some(task) = runtime.heartbeat_task.take() {
++        task.abort();
++        let _ = task.await;
++    }
++
++    match &mut runtime.retained_control {
++        RetainedRunControl::Local(control) => {
++            if let Some(task) = control.completion_task.take() {
++                task.abort();
++                let _ = task.await;
++            }
++            if let Some(task) = control.event_task.take() {
++                task.abort();
++                let _ = task.await;
++            }
++        }
++        RetainedRunControl::Synthetic(_) => {}
++        RetainedRunControl::Remote(control) => {
++            if let Some(task) = control.observe_task.take() {
++                task.abort();
++                let _ = task.await;
++            }
++        }
++    }
++}
++
+ struct GreenfieldHostStartProposalV1 {
+     authority: HostSessionAuthority,
+     workspace_binding: WorkspaceBindingV1,
+@@ -1888,6 +2083,102 @@ struct GreenfieldHostStartProposalV1 {
+     intended_host_principal: Option<PlatformPrincipalV1>,
+ }
+ 
++#[cfg(target_os = "linux")]
++fn targeted_repl_start_digest(domain: &str, parts: &[&[u8]]) -> String {
++    let mut hasher = Sha256::new();
++    hasher.update(domain.as_bytes());
++    for part in parts {
++        hasher.update((part.len() as u64).to_be_bytes());
++        hasher.update(part);
++    }
++    hasher
++        .finalize()
++        .iter()
++        .map(|byte| format!("{byte:02x}"))
++        .collect()
++}
++
++#[cfg(target_os = "linux")]
++fn targeted_repl_durable_start_plan(
++    proposal: &GreenfieldHostStartProposalV1,
++    world_binding: Option<&PersistedWorldBinding>,
++    prompt: &str,
++) -> std::result::Result<HiddenOwnerHelperLaunchPlan, RuntimeBootstrapFailure> {
++    let descriptor = ResolvedRuntimeDescriptor::from(&proposal.descriptor);
++    let host_attach_contract =
++        HostAttachContract::from_resolved_contract(&proposal.resolved_contract, None);
++    let prompt_sha256 = targeted_repl_start_digest(
++        "substrate.a1.3-p1.public-start-prompt.v1",
++        &[prompt.as_bytes()],
++    );
++    let stable_request = serde_json::json!({
++        "schema_version": 1,
++        "caller": "repl_targeted_start",
++        "descriptor": &descriptor,
++        "workspace_root": &proposal.workspace_binding.workspace_root.physical_path,
++        "world_binding": world_binding.map(|binding| serde_json::json!({
++            "world_id": &binding.world_id,
++            "world_generation": binding.world_generation,
++        })),
++        "host_attach_contract": &host_attach_contract,
++        "public_backend_id": &proposal.descriptor.backend_id,
++        "public_scope": "host",
++        "prompt_sha256": &prompt_sha256,
++    });
++    let stable_request_bytes =
++        serde_json::to_vec(&stable_request).map_err(|error| RuntimeBootstrapFailure {
++            exit_code: 1,
++            message: format!("failed to encode targeted HSA Start request identity: {error}"),
++        })?;
++    let request_key_sha256 = targeted_repl_start_digest(
++        "substrate.repl.targeted-start-request.v1",
++        &[&stable_request_bytes],
++    );
++    let stable_id = |prefix: &str, domain: &str| {
++        format!(
++            "{prefix}_{}",
++            &targeted_repl_start_digest(domain, &[request_key_sha256.as_bytes()])[..32]
++        )
++    };
++    let orchestration_session_id = stable_id("aos", "substrate.repl.targeted-start-session.v1");
++    let participant_id = stable_id("ash", "substrate.repl.targeted-start-participant.v1");
++    Ok(HiddenOwnerHelperLaunchPlan {
++        mode: OwnerHelperMode::Start,
++        descriptor,
++        session: HiddenOwnerHelperSessionPlan {
++            orchestration_session_id,
++            shell_trace_session_id: proposal.shell_session_id.clone(),
++            workspace_root: proposal
++                .workspace_binding
++                .workspace_root
++                .physical_path
++                .clone(),
++            world_id: world_binding.map(|binding| binding.world_id.clone()),
++            world_generation: world_binding.map(|binding| binding.world_generation),
++        },
++        participant: HiddenOwnerHelperParticipantPlan {
++            participant_id,
++            lease_token: targeted_repl_start_digest(
++                "substrate.repl.targeted-start-lease.v1",
++                &[request_key_sha256.as_bytes()],
++            ),
++            run_id: stable_id("run", "substrate.repl.targeted-start-run.v1"),
++            resumed_from_participant_id: None,
++            internal_uaa_session_id: None,
++        },
++        host_attach_contract,
++        startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
++            prompt_text: prompt.to_string(),
++            stream_path: PathBuf::from("/tmp/substrate-repl-targeted-start-transport-pending"),
++            request_key_sha256: Some(request_key_sha256),
++            prompt_sha256: Some(prompt_sha256),
++            public_backend_id: Some(proposal.descriptor.backend_id.clone()),
++            public_scope: Some(AgentExecutionScope::Host),
++        }),
++        source_orchestration_session_id: None,
++    })
++}
++
+ impl RuntimeOrchestrationContext {
+     fn orchestration_session_id(&self) -> String {
+         self.orchestration_session
+@@ -6070,10 +6361,146 @@ fn resolve_authority_managed_attach_ownership(
+     }
+ }
+ 
++#[cfg(target_os = "linux")]
++fn resume_turn_completion_evidence_id(
++    current: &HostSessionTransitionIntentV3,
++    terminal: &AuthoritativeStartTerminalEvidenceV1,
++) -> String {
++    let mut hasher = Sha256::new();
++    hasher.update(b"substrate.a1.3-p1.resume-turn-completion-evidence.v1");
++    for value in [
++        current.intent_id.as_bytes(),
++        current.run_id.as_bytes(),
++        terminal.thread_id.as_bytes(),
++        terminal.turn_id.as_bytes(),
++        terminal.provider_event_kind.as_bytes(),
++        terminal.raw_event_sha256.as_bytes(),
++    ] {
++        hasher.update((value.len() as u64).to_be_bytes());
++        hasher.update(value);
++    }
++    let digest_hex = hasher
++        .finalize()
++        .iter()
++        .map(|byte| format!("{byte:02x}"))
++        .collect::<String>();
++    format!("evt_{digest_hex}")
++}
++
++#[cfg(target_os = "linux")]
++/// Adapts an exact native provider turn terminal into the existing HSA
++/// resumable-clean cut when the canonical world-work registry proves that the
++/// turn accepted no retained world work. The accepted HSA input is the work
++/// acceptance, and the typed provider event is the sole materialized terminal
++/// event; callers must prefer the canonical retained-work cut whenever one
++/// exists.
++fn direct_provider_terminal_obligation_cut(
++    current: &HostSessionTransitionIntentV3,
++    authority_revision_observed: u64,
++    authority_store_id: &str,
++    correlation: &HostTransitionWorkCorrelationV1,
++    terminal: &AuthoritativeStartTerminalEvidenceV1,
++) -> std::result::Result<ObligationLedgerSnapshotReadV1, RuntimeBootstrapFailure> {
++    let failure = |message: String| RuntimeBootstrapFailure {
++        exit_code: 1,
++        message: format!("authority-managed ResumeOneTurn reconciliation failed: {message}"),
++    };
++    if terminal.phase != TurnLifecyclePhaseV1::Completed
++        || !matches!(
++            terminal.provider_event_kind.as_str(),
++            "turn.completed" | "result.success"
++        )
++        || terminal.thread_id.trim().is_empty()
++        || terminal.turn_id.trim().is_empty()
++        || terminal.raw_event_sha256.len() != 64
++        || !terminal
++            .raw_event_sha256
++            .bytes()
++            .all(|byte| byte.is_ascii_hexdigit())
++    {
++        return Err(failure(
++            "direct provider cut requires exact typed successful terminal evidence".to_string(),
++        ));
++    }
++    let HostSessionTransitionInputHandoffV1::Accepted {
++        input_ref,
++        run_id,
++        acceptance_ref,
++        ..
++    } = &current.input_handoff
++    else {
++        return Err(failure(
++            "typed provider completion requires exact accepted input evidence".to_string(),
++        ));
++    };
++    if current.transition_input_ref.as_ref() != Some(input_ref) || run_id != &current.run_id {
++        return Err(failure(
++            "typed provider completion input identity changed".to_string(),
++        ));
++    }
++    let completed_at = successor_timestamp_now()?;
++    let captured_at = chrono::DateTime::parse_from_rfc3339(completed_at.as_str())
++        .map_err(|error| failure(error.to_string()))?
++        .with_timezone(&chrono::Utc);
++    let event_id = resume_turn_completion_evidence_id(current, terminal);
++    let stream_id = format!("provider-{}", &event_id[4..36]);
++    let acceptance_record_id = acceptance_ref.ref_id.clone();
++    let acceptance_record_revision = current.intent_revision;
++    let accepted_work_identity = AcceptedWorldWorkIdentityV1::RetainedTurn {
++        active_run_id: current.run_id.clone(),
++        message_id: terminal.turn_id.clone(),
++        target_participant_id: current.target_authoritative_participant_id.clone(),
++    };
++    let terminal_event = SupervisorJournalEventRefV1 {
++        schema_version: 1,
++        journal_entry_id: format!("provider-{event_id}"),
++        acceptance_record_id: acceptance_record_id.clone(),
++        acceptance_record_revision,
++        accepted_work_identity: accepted_work_identity.clone(),
++        stream_id: stream_id.clone(),
++        frame_sequence: 1,
++        event_id: event_id.clone(),
++        event_sequence: 1,
++        transport_event_commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
++            digest_hex: terminal.raw_event_sha256.clone(),
++        },
++    };
++    Ok(ObligationLedgerSnapshotReadV1::Complete {
++        snapshot: ObligationSnapshotHashInputV1 {
++            schema_version: 1,
++            authority_store_id: authority_store_id.to_string(),
++            orchestration_session_id: current.orchestration_session_id.clone(),
++            authoritative_participant_id: current.target_authoritative_participant_id.clone(),
++            acceptance_record_id: acceptance_record_id.clone(),
++            acceptance_record_revision,
++            stream_id: stream_id.clone(),
++            accepted_work_identity,
++            host_transition_correlation: correlation.clone(),
++            transition_intent_id: current.intent_id.clone(),
++            transition_run_id: current.run_id.clone(),
++            authority_revision_observed,
++            materialization_cut: ObligationMaterializationCutV1 {
++                acceptance_record_id,
++                acceptance_record_revision,
++                stream_id,
++                session_ledger_revision: current.intent_revision,
++                terminal_event_id: event_id,
++                terminal_event_sequence: 1,
++                materialized_through_event_sequence: 1,
++            },
++            materialized_journal_events: vec![terminal_event],
++            attention_disposition: ObligationAttentionDispositionV1::NoUnresolvedAttention,
++            unresolved_attention_obligations: Vec::new(),
++            captured_at,
++        },
++    })
++}
++
+ #[cfg(target_os = "linux")]
+ fn settle_authority_managed_resume_post_turn(
+     successor: &AuthorityManagedSuccessorLaunchPlanV1,
+     state_store: &AgentRuntimeStateStore,
++    terminal: &AuthoritativeStartTerminalEvidenceV1,
+ ) -> std::result::Result<HostSessionPostureV1, RuntimeBootstrapFailure> {
+     let failure = |message: String| RuntimeBootstrapFailure {
+         exit_code: 1,
+@@ -6153,10 +6580,22 @@ fn settle_authority_managed_resume_post_turn(
+         | HostSessionPostTurnApplicationV2::NotApplicable => unreachable!(),
+     };
+     expected_correlation.validate().map_err(failure)?;
+-    let ledger_read =
+-        read_exact_start_obligation_ledger_snapshot(state_store, &registry, &expected_correlation)
+-            .map_err(|error| failure(error.to_string()))?
+-            .ok_or_else(|| failure("exact retained-turn acceptance is absent".to_string()))?;
++    let ledger_read = match read_exact_start_obligation_ledger_snapshot(
++        state_store,
++        &registry,
++        &expected_correlation,
++    )
++    .map_err(|error| failure(error.to_string()))?
++    {
++        Some(ledger_read) => ledger_read,
++        None => direct_provider_terminal_obligation_cut(
++            &current,
++            resolved.observation.authority_revision,
++            &resolved.observation.authority_store_id,
++            &expected_correlation,
++            terminal,
++        )?,
++    };
+     let snapshot = match &ledger_read {
+         ObligationLedgerSnapshotReadV1::Complete { snapshot } => snapshot,
+         ObligationLedgerSnapshotReadV1::Pending { .. } => {
+@@ -7518,6 +7957,17 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
+                                         match settle_authority_managed_resume_post_turn(
+                                             successor,
+                                             &event_store,
++                                            &AuthoritativeStartTerminalEvidenceV1 {
++                                                phase: observation.phase,
++                                                thread_id: observation.thread_id.clone(),
++                                                turn_id: observation.turn_id.clone(),
++                                                provider_event_kind: observation
++                                                    .provider_event_kind
++                                                    .clone(),
++                                                raw_event_sha256: observation
++                                                    .raw_event_sha256
++                                                    .clone(),
++                                            },
+                                         ) {
+                                             Ok(posture) => {
+                                                 settled_start_posture = Some(posture);
+@@ -9102,6 +9552,13 @@ fn resolve_targeted_turn_route(
+     }
+ 
+     if let Some(startup_context) = startup_context {
++        #[cfg(target_os = "linux")]
++        if authority_managed_targeted_turn_identity(startup_context)
++            .is_some_and(|identity| identity.backend_id == backend_id)
++        {
++            return Ok(TargetedTurnRoute::Host);
++        }
++
+         if select_host_runtime_descriptor_for_backend(startup_context, backend_id)?.is_some() {
+             let expected = agent_runtime
+                 .map(active_orchestrator_backend_id)
+@@ -9170,6 +9627,16 @@ async fn dispatch_targeted_follow_up_turn(
+     match route {
+         TargetedTurnRoute::Host => {
+             if agent_runtime.is_none() {
++                #[cfg(target_os = "linux")]
++                if let Some(identity) = startup_context
++                    .as_ref()
++                    .and_then(authority_managed_targeted_turn_identity)
++                {
++                    submit_authority_managed_host_targeted_turn(identity, targeted_turn.prompt)
++                        .await?;
++                    return Ok(TargetedTurnDispatchStatus::Submitted);
++                }
++
+                 let proposal = dormant_host_launch_plan.take().ok_or_else(|| {
+                     anyhow!(
+                         "substrate: error: no active or dormant orchestrator runtime is available for targeted follow-up turns"
+@@ -9182,30 +9649,88 @@ async fn dispatch_targeted_follow_up_turn(
+                         world_id: session.world_id.clone(),
+                         world_generation: session.world_generation,
+                     });
++                #[cfg(target_os = "linux")]
++                let durable_start_plan = targeted_repl_durable_start_plan(
++                    &proposal,
++                    initial_world_binding.as_ref(),
++                    targeted_turn.prompt,
++                )
++                .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+                 let prepared = apply_greenfield_host_start_from_authority(
+                     proposal,
+                     initial_world_binding.as_ref(),
+-                    None,
++                    {
++                        #[cfg(target_os = "linux")]
++                        {
++                            Some(&durable_start_plan)
++                        }
++                        #[cfg(not(target_os = "linux"))]
++                        {
++                            None
++                        }
++                    },
+                 )
+                 .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+                 let prepared_startup_context = prepared.startup_context.clone();
+-                let runtime = match start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
+-                    Some(prepared),
+-                    initial_world_binding.as_ref(),
+-                    Some(InitialExecPromptPlan::Replace(
+-                        targeted_turn.prompt.to_string(),
+-                    )),
+-                    false,
+-                    false,
+-                    false,
+-                    Some(toolbox_request_tx),
+-                    None,
+-                    agent_printer,
+-                    telemetry,
+-                )
+-                .await
+-                {
+-                    Ok(Some(runtime)) => runtime,
++                #[cfg(target_os = "linux")]
++                let startup = if matches!(
++                    &prepared.startup_context.authority,
++                    RuntimeAuthorityContext::Bound(_)
++                ) {
++                    start_authority_managed_targeted_runtime(
++                        prepared,
++                        initial_world_binding.as_ref(),
++                        targeted_turn.prompt,
++                        toolbox_request_tx,
++                        agent_printer,
++                        telemetry,
++                    )
++                    .await
++                } else {
++                    start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
++                        Some(prepared),
++                        initial_world_binding.as_ref(),
++                        Some(InitialExecPromptPlan::Replace(
++                            targeted_turn.prompt.to_string(),
++                        )),
++                        false,
++                        false,
++                        false,
++                        Some(toolbox_request_tx),
++                        None,
++                        agent_printer,
++                        telemetry,
++                    )
++                    .await
++                };
++                #[cfg(not(target_os = "linux"))]
++                let startup =
++                    start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_request_tx(
++                        Some(prepared),
++                        initial_world_binding.as_ref(),
++                        Some(InitialExecPromptPlan::Replace(
++                            targeted_turn.prompt.to_string(),
++                        )),
++                        false,
++                        false,
++                        false,
++                        Some(toolbox_request_tx),
++                        None,
++                        agent_printer,
++                        telemetry,
++                    )
++                    .await;
++                let runtime = match startup {
++                    Ok(Some(runtime)) => Some(runtime),
++                    #[cfg(target_os = "linux")]
++                    Ok(None)
++                        if matches!(
++                            &prepared_startup_context.authority,
++                            RuntimeAuthorityContext::Bound(_)
++                        ) =>
++                    {
++                        None
++                    }
+                     Ok(None) => {
+                         return Err(anyhow!(
+                             "substrate: error: targeted orchestrator launch did not produce a runtime"
+@@ -9222,15 +9747,47 @@ async fn dispatch_targeted_follow_up_turn(
+                     }
+                 };
+                 *startup_context = Some(prepared_startup_context);
+-                *agent_runtime = Some(runtime);
++                *agent_runtime = runtime;
+             } else {
+-                let runtime = agent_runtime.as_mut().ok_or_else(|| {
+-                    anyhow!(
+-                        "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
++                #[cfg(target_os = "linux")]
++                if let Some(identity) = startup_context
++                    .as_ref()
++                    .and_then(authority_managed_targeted_turn_identity)
++                {
++                    submit_authority_managed_host_targeted_turn(identity, targeted_turn.prompt)
++                        .await?;
++                    if let Some(runtime) = agent_runtime.take() {
++                        retire_authority_managed_targeted_runtime(runtime).await;
++                    }
++                } else {
++                    let runtime = agent_runtime.as_mut().ok_or_else(|| {
++                        anyhow!(
++                            "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
++                        )
++                    })?;
++                    submit_host_targeted_turn(
++                        runtime,
++                        targeted_turn.prompt,
++                        agent_printer,
++                        telemetry,
+                     )
+-                })?;
+-                submit_host_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
+                     .await?;
++                }
++                #[cfg(not(target_os = "linux"))]
++                {
++                    let runtime = agent_runtime.as_mut().ok_or_else(|| {
++                        anyhow!(
++                            "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
++                        )
++                    })?;
++                    submit_host_targeted_turn(
++                        runtime,
++                        targeted_turn.prompt,
++                        agent_printer,
++                        telemetry,
++                    )
++                    .await?;
++                }
+             }
+         }
+         #[cfg(any(target_os = "linux", target_os = "macos"))]
+@@ -17592,7 +18149,6 @@ mod tests {
+             runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
+         )
+         .expect("write codex agent file");
+-
+         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+         let proposal = super::prepare_host_orchestrator_runtime_startup(&config)
+             .expect("prepare host proposal should succeed")
+@@ -17852,6 +18408,90 @@ mod tests {
+         );
+     }
+ 
++    #[cfg(target_os = "linux")]
++    #[test]
++    #[serial_test::serial]
++    fn hsa_targeted_turn_selects_exact_authority_identity_without_changing_legacy_routing() {
++        let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
++        let temp = private_authority_test_tempdir();
++        let workspace_root = temp.path().join("workspace");
++        let substrate_home = temp.path().join("h");
++        fs::create_dir_all(&workspace_root).expect("workspace root");
++        fs::create_dir_all(&substrate_home).expect("substrate home");
++        use std::os::unix::fs::PermissionsExt;
++        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
++            .expect("private substrate home");
++        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
++        let fake_orchestrator = write_fake_codex_script(&temp, true);
++
++        _authority_env.install_home(&substrate_home);
++        fs::write(
++            substrate_home.join("config.yaml"),
++            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\n",
++        )
++        .expect("write config");
++        fs::write(
++            substrate_home.join("policy.yaml"),
++            "agents:\n  allowed_backends:\n    - cli:codex-host\n",
++        )
++        .expect("write policy");
++        let agents_dir = substrate_home.join("agents");
++        fs::create_dir_all(&agents_dir).expect("agents dir");
++        fs::write(
++            agents_dir.join("codex-host.yaml"),
++            runtime_agent_file("codex-host", "host", "codex", &fake_orchestrator),
++        )
++        .expect("write codex agent file");
++        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
++            .expect("private agents dir");
++        for relative in ["config.yaml", "policy.yaml", "agents/codex-host.yaml"] {
++            fs::set_permissions(
++                substrate_home.join(relative),
++                fs::Permissions::from_mode(0o600),
++            )
++            .unwrap_or_else(|_| panic!("private accepted-home file {relative}"));
++        }
++
++        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
++        let world_binding = PersistedWorldBinding {
++            world_id: "wld_hsa_targeted_turn".to_string(),
++            world_generation: 29,
++        };
++        let prepared =
++            prepare_host_orchestrator_runtime_startup_with_world_binding(&config, &world_binding)
++                .expect("prepare bound HSA Start")
++                .expect("configured host runtime");
++
++        let identity = authority_managed_targeted_turn_identity(&prepared.startup_context)
++            .expect("bound HSA context must select authority-managed targeted Turn");
++        assert_eq!(
++            identity.orchestration_session_id,
++            prepared.startup_context.orchestration_session_id()
++        );
++        assert_eq!(identity.backend_id, "cli:codex-host");
++        assert!(identity.world_bound);
++
++        assert!(matches!(
++            resolve_targeted_turn_route(
++                Some(&prepared.startup_context),
++                None,
++                None,
++                &RetainedMemberRuntimeMap::new(),
++                &PendingMemberReplacementMap::new(),
++                "cli:codex-host",
++            )
++            .expect("settled HSA identity must route without stale local runtime ownership"),
++            TargetedTurnRoute::Host
++        ));
++
++        let mut legacy_context = prepared.startup_context.clone();
++        legacy_context.authority = RuntimeAuthorityContext::Legacy;
++        assert!(
++            authority_managed_targeted_turn_identity(&legacy_context).is_none(),
++            "pre-HSA compatibility routing must remain unchanged"
++        );
++    }
++
+     #[cfg(unix)]
+     #[test]
+     #[serial_test::serial]
+diff --git a/crates/shell/tests/repl_world_first_routing_v1.rs b/crates/shell/tests/repl_world_first_routing_v1.rs
+index dc72d5305ce9bac212b6cba93eff92f137114f11..a42a2fe3fedce5a7332c9141b74d160db9f85d1d 100644
+--- a/crates/shell/tests/repl_world_first_routing_v1.rs
++++ b/crates/shell/tests/repl_world_first_routing_v1.rs
+@@ -1780,6 +1780,77 @@ fn canonical_participant_path(
+         .join(format!("{participant_id}.json"))
+ }
+ 
++#[cfg(target_os = "linux")]
++fn read_hsa_root(substrate_home: &Path) -> Value {
++    serde_json::from_str(
++        &fs::read_to_string(substrate_home.join("authority-v1/state-root-v1.json"))
++            .expect("read HSA root"),
++    )
++    .expect("parse HSA root")
++}
++
++#[cfg(target_os = "linux")]
++fn read_hsa_authority(substrate_home: &Path, orchestration_session_id: &str) -> Value {
++    let root = read_hsa_root(substrate_home);
++    let record = root
++        .get("session_namespace_map")
++        .and_then(|sessions| sessions.get(orchestration_session_id))
++        .unwrap_or_else(|| panic!("missing HSA session {orchestration_session_id}: {root}"));
++    assert_eq!(
++        record.get("kind").and_then(Value::as_str),
++        Some("Authority")
++    );
++    record.get("value").cloned().expect("HSA authority value")
++}
++
++#[cfg(target_os = "linux")]
++fn wait_for_hsa_posture(
++    substrate_home: &Path,
++    orchestration_session_id: &str,
++    expected_posture: &str,
++    timeout: Duration,
++) -> Value {
++    let deadline = Instant::now() + timeout;
++    while Instant::now() < deadline {
++        let authority = read_hsa_authority(substrate_home, orchestration_session_id);
++        if authority
++            .pointer("/lifecycle_posture/kind")
++            .and_then(Value::as_str)
++            == Some(expected_posture)
++        {
++            return authority;
++        }
++        std::thread::sleep(Duration::from_millis(25));
++    }
++    panic!(
++        "timed out waiting for HSA posture {expected_posture}: {}",
++        read_hsa_authority(substrate_home, orchestration_session_id)
++    );
++}
++
++#[cfg(target_os = "linux")]
++fn read_hsa_resume_handle(substrate_home: &Path, reference: &Value) -> Value {
++    let ref_id = reference
++        .get("ref_id")
++        .and_then(Value::as_str)
++        .expect("resume handle ref_id");
++    let schema_version = reference
++        .get("schema_version")
++        .and_then(Value::as_u64)
++        .expect("resume handle schema version");
++    serde_json::from_str(
++        &fs::read_to_string(
++            substrate_home
++                .join(format!(
++                    "authority-v1/objects/resume-handle/v{schema_version}"
++                ))
++                .join(format!("{ref_id}.obj")),
++        )
++        .expect("read HSA resume handle"),
++    )
++    .expect("parse HSA resume handle")
++}
++
+ #[cfg(any(target_os = "linux", target_os = "macos"))]
+ fn read_orchestration_session(session_path: &Path) -> Value {
+     serde_json::from_str(&fs::read_to_string(session_path).expect("read orchestration session"))
+@@ -2400,6 +2471,28 @@ impl PtyRepl {
+             extra_env,
+             args,
+             None,
++            false,
++        )
++    }
++
++    #[cfg(target_os = "linux")]
++    fn spawn_caged(
++        project_dir: &Path,
++        home_dir: &Path,
++        substrate_home: &Path,
++        socket_path: &Path,
++        extra_env: &[(&str, &str)],
++        args: &[&str],
++    ) -> Self {
++        Self::spawn_inner(
++            project_dir,
++            home_dir,
++            substrate_home,
++            socket_path,
++            extra_env,
++            args,
++            None,
++            true,
+         )
+     }
+ 
+@@ -2411,6 +2504,7 @@ impl PtyRepl {
+         extra_env: &[(&str, &str)],
+         args: &[&str],
+         startup_delay: Option<Duration>,
++        caged: bool,
+     ) -> Self {
+         ensure_substrate_built();
+ 
+@@ -2457,8 +2551,8 @@ impl PtyRepl {
+             cmd.env("SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR", &test_world_deps_bin);
+         }
+         cmd.env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path());
+-        cmd.env("SUBSTRATE_CAGED", "0");
+-        cmd.arg("--uncaged");
++        cmd.env("SUBSTRATE_CAGED", if caged { "1" } else { "0" });
++        cmd.arg(if caged { "--caged" } else { "--uncaged" });
+         cmd.env("SHIM_TRACE_LOG", home_dir.join(".substrate/trace.jsonl"));
+         cmd.env("SUBSTRATE_WORLD_SOCKET", socket_path);
+         cmd.env("SUBSTRATE_OVERRIDE_WORLD", "enabled");
+@@ -7772,6 +7866,340 @@ fn c3_targeted_codex_world_turn_after_parked_host_mismatch_remains_fail_closed()
+     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+ }
+ 
++#[cfg(target_os = "linux")]
++#[test]
++#[serial]
++fn rg_base_03_hsa_targeted_resume_uses_typed_lifecycle_without_legacy_authority_writes() {
++    let temp = temp_dir("substrate-rg-base-03-hsa-targeted-resume-");
++    let home = temp.path().join("home");
++    let project = temp.path().join("project");
++    fs::create_dir_all(&home).expect("create HOME");
++    fs::create_dir_all(&project).expect("create project");
++    fs::write(project.join("alpha.txt"), "alpha\n").expect("seed project file");
++    write_profile(&project);
++
++    let safe_install_parent =
++        PathBuf::from(std::env::var_os("HOME").expect("RG-BASE-03 test requires HOME"));
++    let install_home = tempfile::Builder::new()
++        .prefix("substrate-rg-base-03-install-")
++        .tempdir_in(safe_install_parent)
++        .expect("create private installed invocation prefix");
++    let substrate_home = install_home.path().to_path_buf();
++    use std::os::unix::fs::PermissionsExt as _;
++    fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
++        .expect("set private installed invocation prefix mode");
++    fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
++
++    let (fake_host, host_invocation_count_path) =
++        write_fake_codex_script_with_prompt_memory_and_clean_park(temp.path());
++    let fake_member = write_fake_codex_script(temp.path());
++    write_codex_host_and_world_member_runtime_world_config(
++        &substrate_home,
++        &fake_host,
++        &fake_member,
++        "auto_restart",
++    );
++    let config_path = substrate_home.join("config.yaml");
++    let caged_config = fs::read_to_string(&config_path)
++        .expect("read runtime config")
++        .replacen("caged: false", "caged: true", 1);
++    fs::write(&config_path, caged_config).expect("enable caged RG-BASE-03 config");
++    fs::set_permissions(
++        substrate_home.join("agents"),
++        fs::Permissions::from_mode(0o700),
++    )
++    .expect("set private accepted-home inventory mode");
++    for relative in ["config.yaml", "policy.yaml", "agents/codex.yaml"] {
++        fs::set_permissions(
++            substrate_home.join(relative),
++            fs::Permissions::from_mode(0o600),
++        )
++        .unwrap_or_else(|_| panic!("set private accepted-home file mode for {relative}"));
++    }
++
++    let sock_temp = short_socket_dir("substrate-rg-base-03-world-");
++    let sock = sock_temp.path().join("world.sock");
++    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
++    let records = server.records();
++    let install_prefix = substrate_home.to_string_lossy().into_owned();
++    let mut repl = PtyRepl::spawn_caged(
++        &project,
++        &home,
++        &substrate_home,
++        &sock,
++        &[],
++        &["--world", "--install-prefix", install_prefix.as_str()],
++    );
++    repl.wait_for_output("Substrate v", Duration::from_secs(6))
++        .expect("banner");
++    repl.wait_for_prompt(Duration::from_secs(2))
++        .expect("initial prompt");
++
++    let initial_prompt = "just reply OK!";
++    repl.send_line(&format!("::cli:codex-host {initial_prompt}"));
++    repl.wait_for_output(
++        "shell-owned orchestrator session is ready via retained attached control ownership",
++        Duration::from_secs(15),
++    )
++    .expect("first HSA runtime ready");
++
++    let root = read_hsa_root(&substrate_home);
++    let sessions = root
++        .get("session_namespace_map")
++        .and_then(Value::as_object)
++        .expect("HSA session namespace map");
++    let authority_sessions = sessions
++        .iter()
++        .filter(|(_, record)| record.get("kind").and_then(Value::as_str) == Some("Authority"))
++        .collect::<Vec<_>>();
++    assert_eq!(
++        authority_sessions.len(),
++        1,
++        "RG-BASE-03 must use one exact HSA session: {root}"
++    );
++    let orchestration_session_id = authority_sessions[0].0.clone();
++    let settled_start = wait_for_hsa_posture(
++        &substrate_home,
++        &orchestration_session_id,
++        "ParkedResumable",
++        Duration::from_secs(5),
++    );
++    let initial_participant_id = settled_start
++        .get("active_authoritative_participant_id")
++        .and_then(Value::as_str)
++        .expect("settled Start authoritative participant")
++        .to_string();
++    let initial_world_binding = settled_start
++        .get("world_binding")
++        .cloned()
++        .expect("settled Start world binding");
++    let settled_start_handle_ref = settled_start
++        .get("internal_resume_handle_refs")
++        .and_then(Value::as_array)
++        .and_then(|refs| refs.last())
++        .cloned()
++        .expect("settled Start durable resume handle");
++    let settled_start_handle = read_hsa_resume_handle(&substrate_home, &settled_start_handle_ref);
++    let continuity_uaa_session_id = settled_start_handle
++        .get("internal_uaa_session_id")
++        .and_then(Value::as_str)
++        .expect("settled Start UAA/provider handle")
++        .to_string();
++    assert_eq!(continuity_uaa_session_id, "thread-test");
++    assert!(
++        !orchestration_session_path(&substrate_home, &orchestration_session_id).exists(),
++        "HSA Start must perform zero legacy session authority writes"
++    );
++    assert!(
++        !canonical_participant_path(
++            &substrate_home,
++            &orchestration_session_id,
++            &initial_participant_id,
++        )
++        .exists(),
++        "HSA Start must perform zero legacy participant authority writes"
++    );
++
++    repl.send_line("ls");
++    repl.wait_for_output("__PERSISTENT_EXEC_STUB__ eof ls", Duration::from_secs(3))
++        .expect("unprefixed ls remains usable");
++    repl.send_line("pwd");
++    repl.wait_for_output("__PERSISTENT_EXEC_STUB__ eof pwd", Duration::from_secs(3))
++        .expect("unprefixed pwd remains usable");
++    repl.send_line("cd ../");
++    repl.wait_for_output(
++        "__PERSISTENT_EXEC_STUB__ eof cd ../",
++        Duration::from_secs(3),
++    )
++    .expect("caged traversal reaches the deterministic world-service boundary");
++    let persistent_execs = records
++        .lock()
++        .expect("lock RG-BASE-03 records")
++        .persistent_execs
++        .clone();
++    assert_eq!(
++        persistent_execs
++            .iter()
++            .map(|record| record.program_utf8.as_str())
++            .collect::<Vec<_>>(),
++        ["ls", "pwd", "cd ../"],
++        "the stub records the exact unprefixed commands; the real-world witness proves cage denial"
++    );
++
++    let resumed_prompt = "tell me what my last message said";
++    repl.send_line(&format!("::cli:codex-host {resumed_prompt}"));
++    let resume_deadline = Instant::now() + Duration::from_secs(15);
++    let root_after_resume = loop {
++        let root = read_hsa_root(&substrate_home);
++        let settled = root
++            .get("successor_transition_intent_map")
++            .and_then(Value::as_object)
++            .into_iter()
++            .flat_map(|intents| intents.values())
++            .any(|intent| {
++                intent.pointer("/mode/kind").and_then(Value::as_str) == Some("ResumeOneTurn")
++                    && intent
++                        .pointer("/state/value/post_turn/kind")
++                        .and_then(Value::as_str)
++                        == Some("Applied")
++            });
++        if settled {
++            break root;
++        }
++        assert!(
++            Instant::now() < resume_deadline,
++            "timed out waiting for authenticated ResumeOneTurn terminal settlement: {root}"
++        );
++        std::thread::sleep(Duration::from_millis(25));
++    };
++    repl.send_line("pwd");
++    wait_for_min_records(&records, 4, 1, Duration::from_secs(3));
++    assert_eq!(
++        records
++            .lock()
++            .expect("lock post-settlement RG-BASE-03 records")
++            .persistent_execs
++            .last()
++            .map(|record| record.program_utf8.as_str()),
++        Some("pwd"),
++        "the HSA-owned settlement must leave the same REPL available for ordinary world commands"
++    );
++    let settled_resume = read_hsa_authority(&substrate_home, &orchestration_session_id);
++    let resume_intents = root_after_resume
++        .get("successor_transition_intent_map")
++        .and_then(Value::as_object)
++        .expect("HSA successor transition map")
++        .values()
++        .filter(|intent| {
++            intent.pointer("/mode/kind").and_then(Value::as_str) == Some("ResumeOneTurn")
++        })
++        .collect::<Vec<_>>();
++    assert_eq!(resume_intents.len(), 1, "one exact ResumeOneTurn intent");
++    let resume = resume_intents[0];
++    assert_eq!(
++        resume
++            .pointer("/state/value/post_turn/kind")
++            .and_then(Value::as_str),
++        Some("Applied"),
++        "authenticated terminal evidence must durably settle ResumeOneTurn"
++    );
++    assert_eq!(
++        resume
++            .pointer("/state/value/post_turn/value/resulting_posture/kind")
++            .and_then(Value::as_str),
++        Some("ParkedResumable")
++    );
++    let resumed_participant_id = resume
++        .get("target_authoritative_participant_id")
++        .and_then(Value::as_str)
++        .expect("ResumeOneTurn target participant");
++    assert_eq!(
++        resume
++            .get("source_authoritative_participant_id")
++            .and_then(Value::as_str),
++        Some(initial_participant_id.as_str()),
++        "ResumeOneTurn must bind the exact source participant"
++    );
++    assert_eq!(
++        settled_resume
++            .get("active_authoritative_participant_id")
++            .and_then(Value::as_str),
++        Some(resumed_participant_id),
++        "terminal settlement must retain the exact revision-authorized successor participant"
++    );
++    assert_eq!(
++        settled_resume.get("world_binding"),
++        Some(&initial_world_binding),
++        "ResumeOneTurn must preserve exact world identity"
++    );
++    let resumed_handle_ref = settled_resume
++        .get("internal_resume_handle_refs")
++        .and_then(Value::as_array)
++        .and_then(|refs| refs.last())
++        .cloned()
++        .expect("resumed durable handle");
++    let resumed_handle = read_hsa_resume_handle(&substrate_home, &resumed_handle_ref);
++    assert_eq!(
++        resumed_handle
++            .get("internal_uaa_session_id")
++            .and_then(Value::as_str),
++        Some(continuity_uaa_session_id.as_str()),
++        "ResumeOneTurn must preserve exact UAA/provider handle continuity"
++    );
++    assert_eq!(
++        read_invocation_count(&host_invocation_count_path),
++        2,
++        "Start and resumed Turn must each submit their one real prompt exactly once"
++    );
++    let second_args = fs::read_to_string(temp.path().join("fake-codex-memory-2.args"))
++        .expect("read resumed provider args");
++    assert!(second_args.lines().any(|line| line == "resume"));
++    assert!(second_args
++        .lines()
++        .any(|line| line == continuity_uaa_session_id));
++    let second_stdin = fs::read_to_string(temp.path().join("fake-codex-memory-2.stdin"))
++        .expect("read resumed provider stdin");
++    assert_eq!(
++        second_stdin.matches(resumed_prompt).count(),
++        1,
++        "the real resumed prompt must be submitted exactly once"
++    );
++    assert!(!second_stdin.contains("Enter persistent Substrate host orchestrator mode."));
++    assert!(!second_stdin.contains("First visible operator request:"));
++    assert!(
++        !orchestration_session_path(&substrate_home, &orchestration_session_id).exists()
++            && !canonical_participant_path(
++                &substrate_home,
++                &orchestration_session_id,
++                resumed_participant_id,
++            )
++            .exists(),
++        "HSA ResumeOneTurn must perform zero legacy authority writes"
++    );
++
++    let retry_output = std::process::Command::new(binary_path())
++        .current_dir(&project)
++        .env("HOME", &home)
++        .env("USERPROFILE", &home)
++        .env("SUBSTRATE_HOME", &substrate_home)
++        .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
++        .env("SUBSTRATE_WORLD_SOCKET", &sock)
++        .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")
++        .env(
++            "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR",
++            substrate_home.join("world-deps-bin"),
++        )
++        .env_remove("SHIM_ORIGINAL_PATH")
++        .args([
++            "--install-prefix",
++            install_prefix.as_str(),
++            "--world",
++            "agent",
++            "turn",
++            "--session",
++            orchestration_session_id.as_str(),
++            "--backend",
++            "cli:codex-host",
++            "--prompt",
++            resumed_prompt,
++            "--json",
++        ])
++        .output()
++        .expect("retry exact settled public Turn");
++    assert!(
++        retry_output.status.success(),
++        "exact settled Turn retry must join: {retry_output:?}"
++    );
++    assert_eq!(
++        read_invocation_count(&host_invocation_count_path),
++        2,
++        "exact retry after settlement must not replay provider submission"
++    );
++
++    repl.send_line("exit");
++    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(5));
++}
++
+ #[cfg(target_os = "linux")]
+ #[test]
+ #[ignore = "Known parked-attached-ownership race on slower Linux hosts; being replaced by the runtime refactor"]

@@ -1,0 +1,56 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 30af276ae2438afaba11b5e59273f280ef3d151d..923f46915eae5f4c9b946b3ec14ef6c75b44e77d 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -95,7 +95,7 @@ cargo bench                                 # exercise hotspots when touching pe
+ <!-- gitnexus:start -->
+ # GitNexus — Code Intelligence
+ 
+-This project is indexed by GitNexus as **substrate-current** (35909 symbols, 72346 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
++This project is indexed by GitNexus as **substrate** (38131 symbols, 78070 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+ 
+ > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+ 
+@@ -118,10 +118,10 @@ This project is indexed by GitNexus as **substrate-current** (35909 symbols, 723
+ 
+ | Resource | Use for |
+ |----------|---------|
+-| `gitnexus://repo/substrate-current/context` | Codebase overview, check index freshness |
+-| `gitnexus://repo/substrate-current/clusters` | All functional areas |
+-| `gitnexus://repo/substrate-current/processes` | All execution flows |
+-| `gitnexus://repo/substrate-current/process/{name}` | Step-by-step execution trace |
++| `gitnexus://repo/substrate/context` | Codebase overview, check index freshness |
++| `gitnexus://repo/substrate/clusters` | All functional areas |
++| `gitnexus://repo/substrate/processes` | All execution flows |
++| `gitnexus://repo/substrate/process/{name}` | Step-by-step execution trace |
+ 
+ ## CLI
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 226b3a18e6b31e2b96591ff9683e1e198c87216d..4946512fe9305d0a68fce3b480be6b0237ef0074 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -1,7 +1,7 @@
+ <!-- gitnexus:start -->
+ # GitNexus — Code Intelligence
+ 
+-This project is indexed by GitNexus as **substrate-current** (35909 symbols, 72346 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
++This project is indexed by GitNexus as **substrate** (38131 symbols, 78070 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+ 
+ > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+ 
+@@ -24,10 +24,10 @@ This project is indexed by GitNexus as **substrate-current** (35909 symbols, 723
+ 
+ | Resource | Use for |
+ |----------|---------|
+-| `gitnexus://repo/substrate-current/context` | Codebase overview, check index freshness |
+-| `gitnexus://repo/substrate-current/clusters` | All functional areas |
+-| `gitnexus://repo/substrate-current/processes` | All execution flows |
+-| `gitnexus://repo/substrate-current/process/{name}` | Step-by-step execution trace |
++| `gitnexus://repo/substrate/context` | Codebase overview, check index freshness |
++| `gitnexus://repo/substrate/clusters` | All functional areas |
++| `gitnexus://repo/substrate/processes` | All execution flows |
++| `gitnexus://repo/substrate/process/{name}` | Step-by-step execution trace |
+ 
+ ## CLI
+ 

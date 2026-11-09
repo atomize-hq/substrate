@@ -1,0 +1,58 @@
+{
+  "schema": "task03-continuation-patches-v1",
+  "status": "local prepared draft for two dirty worktrees; privacy/technical review, publication and actual remote readback remain required",
+  "sources": [
+    {
+      "label": "a3",
+      "base_commit": "d6c06082c9287256a9d56005991bf9962059660c",
+      "base_tree": "cae84c2add3b1820fa305d353b1b09608da1dd94",
+      "fetch_branch": "feat/runtime-refactor-a2-host-execution-episode-demotion",
+      "patch": "a3.patch",
+      "patch_sha256": "16822bec307eeae428a24cb49c4faa454f9c6b7519ceefd5fafeb289ae41a4d3",
+      "staged_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_changed_files": [
+        {
+          "path": "crates/shell/src/repl/async_repl.rs",
+          "original_sha256": "43ea9836bc2dfb4a5356e9652affb9eda6c0c1e035aa601531dd45bd0b1e44f3",
+          "original_mode": "0o644"
+        },
+        {
+          "path": "crates/shell/tests/repl_world_first_routing_v1.rs",
+          "original_sha256": "7157a3960b6015bd15027b9035d9150290565c95dba69ff45f8f5ed746334417",
+          "original_mode": "0o644"
+        }
+      ],
+      "untracked_source_files": [],
+      "local_private_changed_originals": "task03:continuation-a3-originals",
+      "local_private_metadata": "task03:continuation-a3-metadata",
+      "restoration": "Fetch containing branch, checkout exact base, apply patch, chmod each original_changed_files.original_mode, verify original hashes/modes and empty staged diff.",
+      "limitation": "Original metadata copies in local custody only, no off-host private backup; original generated index/cache not reproduced."
+    },
+    {
+      "label": "a1",
+      "base_commit": "6ab6032fe6f0f917be68982adba416d2ded707e3",
+      "base_tree": "56b26fdae340262ce644fcd9fcf06552627ffaf1",
+      "fetch_branch": "feat/a1-3-public-adoption-doc-correction",
+      "patch": "a1.patch",
+      "patch_sha256": "70a0d2e2b78054e4b98684d8ed8c303f0b5c2e6a1855797ce9d94f33f5614f95",
+      "staged_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_changed_files": [
+        {
+          "path": "AGENTS.md",
+          "original_sha256": "471c73e572f731664cba61e403dca45ccb995c064857ad6f0ba7b028c579e182",
+          "original_mode": "0o600"
+        },
+        {
+          "path": "CLAUDE.md",
+          "original_sha256": "a137a05a74b52d96a631fe3e909332c25d6bcf6838bd7f20585e778d759a4637",
+          "original_mode": "0o600"
+        }
+      ],
+      "untracked_source_files": [],
+      "local_private_changed_originals": "task03:continuation-a1-originals",
+      "local_private_metadata": "task03:continuation-a1-metadata",
+      "restoration": "Fetch containing branch, checkout exact base, apply patch, chmod each original_changed_files.original_mode, verify original hashes/modes and empty staged diff.",
+      "limitation": "Original metadata copies in local custody only, no off-host private backup; original generated index/cache not reproduced."
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "schema": "task03-further-clean-links-v1",
+  "links": [
+    {
+      "label": "fc-05",
+      "relative_path": "target/x86_64-unknown-linux-musl",
+      "link_text_sha256": "e95e06e8afe6f56572c41c2f34b5359f112df01de1a638890369fc152eb54504",
+      "mode": "0o777",
+      "target_exists_at_capture": true
+    },
+    {
+      "label": "fc-05",
+      "relative_path": "target/release",
+      "link_text_sha256": "7e068991db7a39e764022d7106a399e42b910a24b8e2ca012a2e2d2665c07bee",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-09",
+      "relative_path": "target/x86_64-unknown-linux-musl",
+      "link_text_sha256": "e95e06e8afe6f56572c41c2f34b5359f112df01de1a638890369fc152eb54504",
+      "mode": "0o777",
+      "target_exists_at_capture": true
+    },
+    {
+      "label": "fc-09",
+      "relative_path": "target/release",
+      "link_text_sha256": "7e068991db7a39e764022d7106a399e42b910a24b8e2ca012a2e2d2665c07bee",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-13",
+      "relative_path": "target/x86_64-unknown-linux-musl",
+      "link_text_sha256": "e95e06e8afe6f56572c41c2f34b5359f112df01de1a638890369fc152eb54504",
+      "mode": "0o777",
+      "target_exists_at_capture": true
+    },
+    {
+      "label": "fc-13",
+      "relative_path": "target/release",
+      "link_text_sha256": "7e068991db7a39e764022d7106a399e42b910a24b8e2ca012a2e2d2665c07bee",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-14",
+      "relative_path": "target/x86_64-unknown-linux-musl",
+      "link_text_sha256": "e95e06e8afe6f56572c41c2f34b5359f112df01de1a638890369fc152eb54504",
+      "mode": "0o777",
+      "target_exists_at_capture": true
+    },
+    {
+      "label": "fc-14",
+      "relative_path": "target/release",
+      "link_text_sha256": "7e068991db7a39e764022d7106a399e42b910a24b8e2ca012a2e2d2665c07bee",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-15",
+      "relative_path": "target/x86_64-unknown-linux-musl",
+      "link_text_sha256": "e95e06e8afe6f56572c41c2f34b5359f112df01de1a638890369fc152eb54504",
+      "mode": "0o777",
+      "target_exists_at_capture": true
+    },
+    {
+      "label": "fc-15",
+      "relative_path": "target/release",
+      "link_text_sha256": "7e068991db7a39e764022d7106a399e42b910a24b8e2ca012a2e2d2665c07bee",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-16",
+      "relative_path": "target/x86_64-unknown-linux-musl",
+      "link_text_sha256": "e95e06e8afe6f56572c41c2f34b5359f112df01de1a638890369fc152eb54504",
+      "mode": "0o777",
+      "target_exists_at_capture": true
+    },
+    {
+      "label": "fc-16",
+      "relative_path": "target/release",
+      "link_text_sha256": "7e068991db7a39e764022d7106a399e42b910a24b8e2ca012a2e2d2665c07bee",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/world-service-linux",
+      "link_text_sha256": "e3bf3b383395a5722873939cde913db707bfe8ac5c8f098bc7b8f163fe50c1d7",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/world-service",
+      "link_text_sha256": "e3bf3b383395a5722873939cde913db707bfe8ac5c8f098bc7b8f163fe50c1d7",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/substrate-shim",
+      "link_text_sha256": "29e24a3d43ba691eef4a10c8f87282c95b9e66d55804fdcdd9cd134900b4142b",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/substrate",
+      "link_text_sha256": "c7f311dc9cc68ade3a8f2a0b35263a8d8110e46634bdc2d4b9e863fd0346f849",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/substrate-gateway",
+      "link_text_sha256": "04e64bf6740c29364db89e7879623868e6740746826d8eb48a54e9953fa99b9a",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/linux/world-service",
+      "link_text_sha256": "e3bf3b383395a5722873939cde913db707bfe8ac5c8f098bc7b8f163fe50c1d7",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    },
+    {
+      "label": "fc-20",
+      "relative_path": "target/bin/linux/substrate-gateway",
+      "link_text_sha256": "04e64bf6740c29364db89e7879623868e6740746826d8eb48a54e9953fa99b9a",
+      "mode": "0o777",
+      "target_exists_at_capture": false
+    }
+  ],
+  "original_text_custody": "task03:further-clean-original-links-private",
+  "limitations": "Link text hash verifies private locally retained original; no link target binary is uploaded. Local custody is not off-host backup."
+}
