@@ -1,0 +1,13 @@
+
+running 8 tests
+test builtins::world_deps::surfaces::tests::world_deps_codex_release_installer_handoff ... ignored, non-executing connected installer proof; requires held archives and a new SUBSTRATE_CODEX_COMPONENT_DIR
+test builtins::world_deps::surfaces::tests::world_deps_codex_runtime_install_script_is_idempotent_and_links_guest_entrypoint ... ignored, designated non-executing official pair proof; requires SUBSTRATE_CODEX_0156_ARCHIVE_DIR
+test builtins::world_deps::surfaces::tests::world_deps_codex_runtime_guest_arch_mapping_normalizes_arm64 ... ok
+test builtins::world_deps::surfaces::tests::world_deps_codex_runtime_guest_arch_mapping_fails_closed_for_unsupported_arch ... ok
+test builtins::world_deps::surfaces::tests::world_deps_codex_runtime_support_fails_closed_for_validated_but_unmapped_target ... ok
+test builtins::world_deps::surfaces::tests::world_deps_codex_runtime_selects_trusted_0156_independently_of_uaa_metadata ... ok
+test builtins::world_deps::surfaces::tests::world_deps_codex_runtime_script_records_self_contained_posture ... ok
+test builtins::world_deps::surfaces::tests::world_deps_codex_release_manifest_history_rollback_and_pending_isolation ... ok
+
+test result: ok. 6 passed; 0 failed; 2 ignored; 0 measured; 1745 filtered out; finished in 2.93s
+

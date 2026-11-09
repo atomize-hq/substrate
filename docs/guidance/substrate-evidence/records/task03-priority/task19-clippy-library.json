@@ -1,0 +1,27 @@
+{
+  "command": [
+    "cargo",
+    "clippy",
+    "--offline",
+    "-p",
+    "shell",
+    "--lib",
+    "--",
+    "-D",
+    "warnings"
+  ],
+  "cwd": "task19:checkout",
+  "head": "46c77fccb60948c8246d513c5cacf92db15567a7",
+  "source_sha256_before": "e3651501609951e10f9e1a7a09c4b0e025a69b8cf113d6971b506ad1d83de704",
+  "environment_overrides": {
+    "CARGO_TARGET_DIR": "task19:checkout/target/task19",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "started_unix": 1793456253.6727893,
+  "exit_code": 101,
+  "finished_unix": 1793456340.5730884,
+  "source_sha256_after": "e3651501609951e10f9e1a7a09c4b0e025a69b8cf113d6971b506ad1d83de704"
+}

@@ -1,0 +1,7 @@
+
+running 2 tests
+test builtins::world_deps::inventory::e3c_tests::e3c_codex_artifact_publication_rejects_incomplete_staged_record_and_head ... ok
+test builtins::world_deps::inventory::e3c_tests::e3c_codex_artifact_recovery_promotes_only_complete_bound_objects ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1751 filtered out; finished in 0.04s
+

@@ -1,0 +1,7 @@
+
+running 2 tests
+test builtins::world_deps::surfaces::tests::test_world_script_install_command_carries_one_payload ... ok
+test builtins::world_deps::surfaces::tests::test_world_script_install_command_executes_both_interpreters ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1751 filtered out; finished in 0.08s
+

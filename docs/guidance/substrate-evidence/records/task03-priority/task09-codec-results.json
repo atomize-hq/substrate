@@ -1,0 +1,628 @@
+{
+  "schema_path": "task09-original:fixed_schema.py",
+  "schema_sha256": "e963661adc84d23138738fbddbe51e500b1f8b9a87bd3b923c359a2eceecd723",
+  "cases": 103,
+  "passed": 103,
+  "results": [
+    {
+      "id": "plain-string",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "ansi-string",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "plain-bytes",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "ansi-bytes",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "seq-boundary-0",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "seq-boundary-18446744073709551615",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "id-boundary-0",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "id-boundary-f",
+      "expected_error": null,
+      "actual_error": null,
+      "passed": true
+    },
+    {
+      "id": "seq-empty",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-leading-zero",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-double-zero",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-plus",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-minus",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-space-before",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-space-after",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-newline",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-overflow",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-too-long",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-unicode-digit",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "seq-hex",
+      "expected_error": "seqnum_shape_or_range",
+      "actual_error": "seqnum_shape_or_range",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM-type-int",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM-type-float",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM-type-bool",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM-type-null",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM-type-list",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM-type-dict",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM_ID-type-int",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM_ID-type-float",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM_ID-type-bool",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM_ID-type-null",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM_ID-type-list",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "__SEQNUM_ID-type-dict",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "id-uppercase",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "id-short",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "id-long",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "id-hyphens",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "id-nonhex",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "id-newline",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "id-space",
+      "expected_error": "seqnum_id_shape",
+      "actual_error": "seqnum_id_shape",
+      "passed": true
+    },
+    {
+      "id": "message-null",
+      "expected_error": "message_type",
+      "actual_error": "message_type",
+      "passed": true
+    },
+    {
+      "id": "message-integer",
+      "expected_error": "message_type",
+      "actual_error": "message_type",
+      "passed": true
+    },
+    {
+      "id": "message-boolean",
+      "expected_error": "message_type",
+      "actual_error": "message_type",
+      "passed": true
+    },
+    {
+      "id": "message-object",
+      "expected_error": "message_type",
+      "actual_error": "message_type",
+      "passed": true
+    },
+    {
+      "id": "message-empty-list",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "message-negative-byte",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-overflow-byte",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-bool-byte",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-float-byte",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-string-byte",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-null-byte",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-nested",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-repeated-strings",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-repeated-byte-arrays",
+      "expected_error": "message_byte_value",
+      "actual_error": "message_byte_value",
+      "passed": true
+    },
+    {
+      "id": "message-utf8-continuation",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-utf8-overlong",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-utf8-truncated",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-utf8-surrogate",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-utf8-too-high",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-string-surrogate-high",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-string-surrogate-low",
+      "expected_error": "message_utf8",
+      "actual_error": "message_utf8",
+      "passed": true
+    },
+    {
+      "id": "message-string-boundary",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "message-bytes-boundary",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "message-string-oversize",
+      "expected_error": "message_length",
+      "actual_error": "message_length",
+      "passed": true
+    },
+    {
+      "id": "message-bytes-oversize",
+      "expected_error": "message_length",
+      "actual_error": "message_length",
+      "passed": true
+    },
+    {
+      "id": "message-multibyte-oversize",
+      "expected_error": "message_length",
+      "actual_error": "message_length",
+      "passed": true
+    },
+    {
+      "id": "message-utf8-nongrammar",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "secret-body-string",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "secret-body-bytes",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "extra-field-string",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "extra-field-bytes",
+      "expected_error": "message_schema",
+      "actual_error": "message_schema",
+      "passed": true
+    },
+    {
+      "id": "missing-MESSAGE",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-MESSAGE",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-_PID",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-_PID",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-__REALTIME_TIMESTAMP",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-__REALTIME_TIMESTAMP",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-_SYSTEMD_UNIT",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-_SYSTEMD_UNIT",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-__CURSOR",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-__CURSOR",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-__MONOTONIC_TIMESTAMP",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-__MONOTONIC_TIMESTAMP",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-_BOOT_ID",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-_BOOT_ID",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-__SEQNUM",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-__SEQNUM",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "missing-__SEQNUM_ID",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "duplicate-__SEQNUM_ID",
+      "expected_error": "duplicate_json_key",
+      "actual_error": "duplicate_json_key",
+      "passed": true
+    },
+    {
+      "id": "unknown-extra",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "top-level-list",
+      "expected_error": "row_fields",
+      "actual_error": "row_fields",
+      "passed": true
+    },
+    {
+      "id": "other-array-_PID",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "other-array-_SYSTEMD_UNIT",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "other-array-__REALTIME_TIMESTAMP",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "other-array-__MONOTONIC_TIMESTAMP",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "other-array-_BOOT_ID",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "other-array-__CURSOR",
+      "expected_error": "row_value_type",
+      "actual_error": "row_value_type",
+      "passed": true
+    },
+    {
+      "id": "preserved-pid_or_unit-_PID",
+      "expected_error": "pid_or_unit",
+      "actual_error": "pid_or_unit",
+      "passed": true
+    },
+    {
+      "id": "preserved-pid_or_unit-_SYSTEMD_UNIT",
+      "expected_error": "pid_or_unit",
+      "actual_error": "pid_or_unit",
+      "passed": true
+    },
+    {
+      "id": "preserved-realtime_interval-__REALTIME_TIMESTAMP",
+      "expected_error": "realtime_interval",
+      "actual_error": "realtime_interval",
+      "passed": true
+    },
+    {
+      "id": "preserved-realtime_interval-__REALTIME_TIMESTAMP",
+      "expected_error": "realtime_interval",
+      "actual_error": "realtime_interval",
+      "passed": true
+    },
+    {
+      "id": "preserved-monotonic_shape-__MONOTONIC_TIMESTAMP",
+      "expected_error": "monotonic_shape",
+      "actual_error": "monotonic_shape",
+      "passed": true
+    },
+    {
+      "id": "preserved-boot_id_shape-_BOOT_ID",
+      "expected_error": "boot_id_shape",
+      "actual_error": "boot_id_shape",
+      "passed": true
+    },
+    {
+      "id": "preserved-cursor_shape_unsupported-__CURSOR",
+      "expected_error": "cursor_shape_unsupported",
+      "actual_error": "cursor_shape_unsupported",
+      "passed": true
+    }
+  ],
+  "query_attempt_count": 0,
+  "prior_577_cases_rerun": false
+}

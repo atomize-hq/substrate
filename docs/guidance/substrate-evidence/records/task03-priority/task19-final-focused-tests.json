@@ -1,0 +1,27 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "-p",
+    "shell",
+    "--lib",
+    "world_script_install_command",
+    "--",
+    "--nocapture"
+  ],
+  "cwd": "task19:checkout",
+  "head": "46c77fccb60948c8246d513c5cacf92db15567a7",
+  "source_sha256_before": "d1bded67bc6a27dd3b9ba4b6ce98bd481482397c654a7f57015a9ad2d545790f",
+  "environment_overrides": {
+    "CARGO_TARGET_DIR": "task19:checkout/target/task19",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "started_unix": 1793456356.4986842,
+  "exit_code": 0,
+  "finished_unix": 1793456424.8703148,
+  "source_sha256_after": "d1bded67bc6a27dd3b9ba4b6ce98bd481482397c654a7f57015a9ad2d545790f"
+}

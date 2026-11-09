@@ -1,0 +1,146 @@
+{
+  "status": "prepared preservation records; publication and remote verification recorded separately",
+  "records": [
+    {
+      "id": "r2-base-wall-serial-summary.json",
+      "kind": "r2",
+      "original_custody": "task03:r2-records-local",
+      "original_sha256": "624cb850feab774d210cb136afe5ce4a13f9dd0d2c20e36d1bbfeb6ddd4fda95",
+      "candidate_sha256": "624cb850feab774d210cb136afe5ce4a13f9dd0d2c20e36d1bbfeb6ddd4fda95",
+      "original_mode": "0o600",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; bounded field and path/credential indicator review found counts/hashes/status only"
+    },
+    {
+      "id": "r2-base-wall-parallel-summary.json",
+      "kind": "r2",
+      "original_custody": "task03:r2-records-local",
+      "original_sha256": "39c6a8e03360dfc79a347e593fb9bc7ed887d6838b18a880dd38f31c71732758",
+      "candidate_sha256": "39c6a8e03360dfc79a347e593fb9bc7ed887d6838b18a880dd38f31c71732758",
+      "original_mode": "0o600",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; bounded field and path/credential indicator review found counts/hashes/status only"
+    },
+    {
+      "id": "r2-head-wall-serial-summary.json",
+      "kind": "r2",
+      "original_custody": "task03:r2-records-local",
+      "original_sha256": "8a125d72fb30ba075ffe1253c3b84295795e6b6a3cbac8c0f51e9390a93a9240",
+      "candidate_sha256": "8a125d72fb30ba075ffe1253c3b84295795e6b6a3cbac8c0f51e9390a93a9240",
+      "original_mode": "0o600",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; bounded field and path/credential indicator review found counts/hashes/status only"
+    },
+    {
+      "id": "r2-head-wall-parallel-summary.json",
+      "kind": "r2",
+      "original_custody": "task03:r2-records-local",
+      "original_sha256": "0d7077825c6de6f75621d4faad24dcc092b0ac911008c1637d35962c47f2c05a",
+      "candidate_sha256": "0d7077825c6de6f75621d4faad24dcc092b0ac911008c1637d35962c47f2c05a",
+      "original_mode": "0o600",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; bounded field and path/credential indicator review found counts/hashes/status only"
+    },
+    {
+      "id": "task19-final-focused-tests.stdout.txt",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "bb4d87dafe5a61a9d61ad9b33ff93baea42bea6d84449d21b7b476560a999c51",
+      "candidate_sha256": "bb4d87dafe5a61a9d61ad9b33ff93baea42bea6d84449d21b7b476560a999c51",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; output names/results, no detected private paths or credential indicators"
+    },
+    {
+      "id": "task19-existing-surfaces-tests.stdout.txt",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "18fe951e16756d85e362ec4deaee22d03f41ab13caa9b5d46edd92ac65977c89",
+      "candidate_sha256": "18fe951e16756d85e362ec4deaee22d03f41ab13caa9b5d46edd92ac65977c89",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; output names/results, no detected private paths or credential indicators"
+    },
+    {
+      "id": "task19-existing-publication-recovery-tests.stdout.txt",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "f8d02a6674ad5c96288ab92bacb7f7fc73a05dc0dc891b0e1619bd9f90575793",
+      "candidate_sha256": "f8d02a6674ad5c96288ab92bacb7f7fc73a05dc0dc891b0e1619bd9f90575793",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "none; output names/results, no detected private paths or credential indicators"
+    },
+    {
+      "id": "task19-final-focused-tests.json",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "2bbf7918a7f1f083c3360f9cc54bb3c54335540d83189d7255876e0e54613826",
+      "candidate_sha256": "b2ac995ca1981d2f281b3256c7203add6fc634089ce085651d7b6ce092b7aeda",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "checkout path replaced with task19:checkout custody reference; JSON reformatted"
+    },
+    {
+      "id": "task19-existing-surfaces-tests.json",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "0a7d5c1899e9d8fa0c34898fc5d7265c7a0f71b4e8efc7e8461f9d6291f9893a",
+      "candidate_sha256": "7e3201eb7a8d2e5b2877b83c3de1eca8aff4f0bbc0b9756d2ce79c785b424ef3",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "checkout path replaced with task19:checkout custody reference; JSON reformatted"
+    },
+    {
+      "id": "task19-existing-publication-recovery-tests.json",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "c222d1850d8e0ca633d3a2f16aa32e2e0de0c9e83a2db45779e33c192b1098fb",
+      "candidate_sha256": "bfe1a3b9ea881712f9929f574a7f40d0fcec80763a3b10f514b326db6cba7021",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "checkout path replaced with task19:checkout custody reference; JSON reformatted"
+    },
+    {
+      "id": "task19-clippy-library.json",
+      "kind": "task19",
+      "original_custody": "task19:protected-originals",
+      "original_sha256": "65b3eeffbcaf7542a9086ed32fd5a152d93191fa44a1fcac202b60b79044460f",
+      "candidate_sha256": "ea344f2d1f826e23be08e90b9926e683ac23ee2e562b1b3c12c76686c0259f54",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "checkout path replaced with task19:checkout custody reference; JSON reformatted"
+    },
+    {
+      "id": "task09-codec-results.json",
+      "kind": "task09",
+      "original_custody": "task09:protected-originals",
+      "original_sha256": "1d300cacc06297d98a14febd623e1ec85021828b64e5786d164248f703e03492",
+      "candidate_sha256": "7ea1eeebcb4f7bae941bc4ff9f55184a325c651ecf3a8b49e2e77d8a037f393a",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "host-local original evidence paths replaced by task09-original custody references; JSON reformatted"
+    },
+    {
+      "id": "task09-codec-command.json",
+      "kind": "task09",
+      "original_custody": "task09:protected-originals",
+      "original_sha256": "eb583f7a8215a0dcc8f77d450d72ac308c6a6dff3305dea5051a3b0c8ce08476",
+      "candidate_sha256": "fed0dd6973b083c8536317b82f3402bcb991d02a3fbee63c8d203eaf6092912f",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "host-local original evidence paths replaced by task09-original custody references; JSON reformatted"
+    },
+    {
+      "id": "task09-links.json",
+      "kind": "generated-archive-map",
+      "original_custody": "task03:task09-link-record",
+      "original_sha256": "094eb309fb3b3c25a9bec9706723119ab0d92d3557dc1732cb8981265d35a525",
+      "candidate_sha256": "f6db6c5f13d607069e43350527489faf4cba28d20e2f9ccc2c7a69227dbd4545",
+      "original_mode": "0o644",
+      "candidate_mode": "0o644",
+      "redaction_reason": "absolute checkout prefix replaced by relative path; link target text SHA-256 retained per entry"
+    }
+  ],
+  "limitation": "Original private sources retained locally; Task09 codec and Task19 focused outputs are historical; Task19 clippy and R2 summaries include failures. A future rebuild is not the original result."
+}

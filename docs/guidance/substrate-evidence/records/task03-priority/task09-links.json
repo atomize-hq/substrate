@@ -1,0 +1,56 @@
+{
+  "status": "historical link map; actual removal recorded separately",
+  "records": [
+    {
+      "link": "target/bin/world-service-linux",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "38660e8c1d599f18c4d31dbad6cd95371806bcafba3cde687c09e57514accffa",
+      "target_within_checkout": "target/debug/world-service",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    },
+    {
+      "link": "target/bin/world-service",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "38660e8c1d599f18c4d31dbad6cd95371806bcafba3cde687c09e57514accffa",
+      "target_within_checkout": "target/debug/world-service",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    },
+    {
+      "link": "target/bin/substrate-shim",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "a1990b19a63dd5a0748d77888203b916711d3d8b843810cb1b4376a3ecfc454b",
+      "target_within_checkout": "target/debug/substrate-shim",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    },
+    {
+      "link": "target/bin/substrate",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "2c4cfd78ddf0c1d0b420f0d757409fddb2b370cecba1fe1a208280a35236b223",
+      "target_within_checkout": "target/debug/substrate",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    },
+    {
+      "link": "target/bin/substrate-gateway",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "f532cdb9c3992e32002dd47d5ceee47c2d877c7f4feb7fdf5035a2f794b851a3",
+      "target_within_checkout": "target/debug/substrate-gateway",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    },
+    {
+      "link": "target/bin/linux/world-service",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "38660e8c1d599f18c4d31dbad6cd95371806bcafba3cde687c09e57514accffa",
+      "target_within_checkout": "target/debug/world-service",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    },
+    {
+      "link": "target/bin/linux/substrate-gateway",
+      "mode": "0o777",
+      "original_absolute_target_sha256": "f532cdb9c3992e32002dd47d5ceee47c2d877c7f4feb7fdf5035a2f794b851a3",
+      "target_within_checkout": "target/debug/substrate-gateway",
+      "redaction": "absolute checkout prefix replaced by relative path; original link target text retained in local custody"
+    }
+  ],
+  "original_custody": "task03:task09-link-record",
+  "limitation": "Hashes bind original symlink target text, not native executable bytes. These links and debug targets are proposed for retirement; actual status must be in a later receipt."
+}

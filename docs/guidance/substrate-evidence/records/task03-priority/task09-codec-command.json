@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-B",
+    "task09-original:test_codec.py",
+    "task09-original:fixed_schema.py"
+  ],
+  "cwd": "/tmp",
+  "started_unix": 1793140724.3890948,
+  "finished_unix": 1793140724.4108465,
+  "exit": 0,
+  "output": "codec-results.json",
+  "stderr": "",
+  "source_sha256": {
+    "test_codec.py": "18dbff798649c13cc8f2558a1fcafcf02d543f1df443b3beb16d4e1ab478b290",
+    "codec_fixtures.py": "dd1b3979a6e1a773cca62d250c72f78d7b262386750f06478f08b9ff7a7f0a42",
+    "fixed_schema.py": "e963661adc84d23138738fbddbe51e500b1f8b9a87bd3b923c359a2eceecd723",
+    "codec-fixtures.json": "c160f9cbbd57320860515d988c051a148ae47e6e721e475811587e289c85c28b"
+  }
+}
