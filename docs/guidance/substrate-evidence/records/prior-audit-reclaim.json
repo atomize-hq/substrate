@@ -1,0 +1,37 @@
+[
+  {
+    "path": "[custody-path-0545]",
+    "allocated_unique_regular_bytes": 50750078976,
+    "directory_bytes": 12574720,
+    "exclusive_regular_reclaim_bytes": 50750078976,
+    "external_hardlink_bytes": 0
+  },
+  {
+    "path": "[custody-path-0546]",
+    "allocated_unique_regular_bytes": 11890376704,
+    "directory_bytes": 11755520,
+    "exclusive_regular_reclaim_bytes": 11890376704,
+    "external_hardlink_bytes": 0
+  },
+  {
+    "path": "[custody-path-0547]",
+    "allocated_unique_regular_bytes": 13438275584,
+    "directory_bytes": 12722176,
+    "exclusive_regular_reclaim_bytes": 13438275584,
+    "external_hardlink_bytes": 0
+  },
+  {
+    "path": "[custody-path-0548]",
+    "allocated_unique_regular_bytes": 7811211264,
+    "directory_bytes": 6131712,
+    "exclusive_regular_reclaim_bytes": 7811211264,
+    "external_hardlink_bytes": 0
+  },
+  {
+    "path": "[custody-path-0549]",
+    "allocated_unique_regular_bytes": 7609425920,
+    "directory_bytes": 10203136,
+    "exclusive_regular_reclaim_bytes": 7609425920,
+    "external_hardlink_bytes": 0
+  }
+]

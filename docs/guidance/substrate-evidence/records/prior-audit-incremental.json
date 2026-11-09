@@ -1,0 +1,9 @@
+{
+  "path": "[custody-path-0550]",
+  "allocated_unique_regular_bytes": 11190607872,
+  "directory_allocated_bytes": 4304896,
+  "exclusive_regular_reclaim_bytes": 10740436992,
+  "externally_hardlinked_regular_bytes": 450170880,
+  "externally_hardlinked_inodes": 1537,
+  "sparse_saved_bytes": 0
+}
