@@ -258,6 +258,16 @@
       "source_identity": "integration source baseline 3dda500a630e7ab92186788b9a0641dc84a788b0",
       "privacy": "logical root names and opaque local custody IDs; private originals remain local",
       "publication_and_remote_verification": "pending"
+    },
+    {
+      "id": "integration-target-continuation-receipt",
+      "portable_destination": "cleanup-receipt-integration-target-continuation.json",
+      "published_sha256": "ed3dd20fa73aff03cf9419997aec408c7d37d087d287aebe478d2caf1a122b98",
+      "kind": "factual completed partial cleanup receipt; publication and remote verification pending",
+      "original_custody": "task05-continuation:original-text-3323",
+      "source_identity": "integration source baseline 3dda500a630e7ab92186788b9a0641dc84a788b0",
+      "privacy": "logical root names and opaque local custody IDs; private originals remain local",
+      "publication_and_remote_verification": "pending"
     }
   ]
 }

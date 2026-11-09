@@ -3603,7 +3603,9 @@
       "observed_exists": true,
       "allocation_bytes": 66752319488,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "held pending group-specific source, records, ownership and live preflight",
+      "partial_target_continuation_receipt": "cleanup-receipt-integration-target-continuation.json",
+      "partial_target_continuation_status": "Selected release compiler outputs and Lift check-cache children removed after reviewed action; retained root, pinned artifacts and other holds remain. See receipt for actual results."
     },
     {
       "id": "inventory-348",
@@ -3694,7 +3696,9 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "held pending group-specific source, records, ownership and live preflight",
+      "partial_target_continuation_receipt": "cleanup-receipt-integration-target-continuation.json",
+      "partial_target_continuation_status": "Selected release compiler outputs removed after reviewed action; retained release root, executables, libraries and other holds remain. See receipt for actual results."
     },
     {
       "id": "inventory-357",

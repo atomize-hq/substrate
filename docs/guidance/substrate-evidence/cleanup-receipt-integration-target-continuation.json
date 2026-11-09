@@ -1,0 +1,147 @@
+{
+  "schema": "substrate-integration-target-continuation-receipt-v1",
+  "status": "Selected integration release and Lift output cleanup completed; publication and remote readback pending.",
+  "logical_root": "W: integration worktree; mapping held in private custody",
+  "source_baseline_commit": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+  "source_recovery_url": "https://github.com/atomize-hq/substrate/tree/3dda500a630e7ab92186788b9a0641dc84a788b0",
+  "base_publication_parent_at_mapping": "fc14132315fbf2c1de39f283b165ffc247802c9e",
+  "prior_debug_receipt": "cleanup-receipt-integration-debug.json",
+  "prior_debug_action_allocated_regular_bytes": 10765107200,
+  "candidate_manifest_sha256": "0d563d6ce60b466e09bc630bcf876ace9cba63dd11d162c7642a9ef0ec3cfbc3",
+  "candidate_membership_sha256": "6298f8c2eadfa3e346b39c1d33d902067e1ae593218ea56af3846f859b3cfe70",
+  "candidate_operator_sha256": "ee4cf91928959ac715ef6a964ad708e131edfb0e5c59b3001cb7c0604b916466",
+  "selected_scope": {
+    "release_deps_path": "target/release/deps",
+    "release_deps_selection": "894 exact frozen rlib and rmeta names from the membership, no dynamic suffix expansion",
+    "release_deps_exact_rlib_rmeta_files": 894,
+    "whole_children": [
+      "target/release/build",
+      "target/release/.fingerprint",
+      "target/lift-seam0-no-default-features/debug/deps",
+      "target/lift-seam0-no-default-features/debug/build",
+      "target/lift-seam0-no-default-features/debug/.fingerprint"
+    ],
+    "entries": 6996,
+    "unique_regular_inodes": 5804,
+    "estimated_exclusive_regular_allocated_bytes": 2521935872
+  },
+  "action": {
+    "command_cwd": "W",
+    "command": "sudo -n python3 $W/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task05/continuation-candidate/remove-frozen.py --gate $W/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task05/continuation-candidate/OWNER-gate.json --receipt $W/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task05/continuation-candidate/OWNER-action --execute",
+    "started_utc": "2026-11-09T22:46:48.675849+00:00",
+    "ended_utc": "2026-11-09T22:46:49.312620+00:00",
+    "exit": 0,
+    "immutable_pre_sha256": "00ee5002af9eac9cfb9f72164a26cdf749cca37e3bd34dd8735cc2fded8eafc0",
+    "separate_post_sha256": "48e9ab384b61d4ae64dde7ffe14b0a2d83c251bcbb511c64ac0bd78aa6f9d4b6",
+    "removed_entries": 6996,
+    "independent_absence_count": 6996
+  },
+  "allocation": {
+    "actual_unique_exclusive_regular_bytes_unlinked": 2521935872,
+    "filesystem_free_bytes_before": 214695079936,
+    "filesystem_free_bytes_after": 217221681152,
+    "filesystem_free_bytes_delta": 2526601216,
+    "free_inodes_before": 45665317,
+    "free_inodes_after": 45672235,
+    "free_inodes_delta": 6918,
+    "cumulative_task05_actual_exclusive_regular_bytes": 13287043072,
+    "accounting_note": "The prior debug action and this continuation are disjoint and separately reported. Filesystem free-byte and inode changes also include directory blocks and concurrent activity and are not attributed solely to the selected regular files."
+  },
+  "checks": {
+    "source_remote_retrieval": {
+      "started_utc": "2026-11-09T22:43:56.335637+00:00",
+      "ended_utc": "2026-11-09T22:43:59.513607+00:00",
+      "exact_remote_content_files": 25,
+      "all_content_hashes_match": true,
+      "directly_advertised_branch_ref": "041e8951cd075e7d3efb3f55e406e79085f498d4",
+      "coverage": "Source, selected records, prior receipt, three public base files and Lift compile-matrix source."
+    },
+    "guards": {
+      "readonly_exit": 0,
+      "process_checked_selected_and_parent_inodes": 6924,
+      "selected_mount_or_alias_matches": 0,
+      "bounded_protected_reference_results_match": true,
+      "protected_source_hashes_match": true,
+      "phase_proof_bytes_at_gate": 497008640,
+      "task05_proof_bytes_at_gate": 7458816,
+      "persistent_and_temporary_limits_checked": true,
+      "disk_available_bytes_at_gate": 214695084032,
+      "tmp_available_bytes_at_gate": 27422486528,
+      "review": "Original T05-D1 P2 mapping proof was repaired and confirmed by a different focused reviewer; owner recorded implementation CLEAN.",
+      "meta_clearance_sha256": "fd3db7b7415a5d3a410f5af414593b9d2255c3d08b4e26bcbea7c304b4a7f12f"
+    },
+    "postcheck": {
+      "independent_postcheck_utc": "2026-11-09T22:47:57.225313+00:00",
+      "selected_absent_count": 6996,
+      "five_selected_children_absent": true,
+      "selected_regular_unique_inodes": 5804,
+      "all_517_held_debug_identities_and_regular_hashes_match": true,
+      "other_held_regular_and_links_count": 534,
+      "other_held_digest": "96e369c422046581076986cb4ddcc3b6c3be26ce793d67febf8fed4a2e24d255",
+      "other_held_digest_matches_pre": true,
+      "held_parent_identities_and_modes_match": true,
+      "original_candidate_and_mapping_hashes_match": true,
+      "canonical_marker_unchanged": true,
+      "integration_source_head": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+      "integration_tracked_status": "M docs/BACKLOG.md",
+      "protected_actor_inode": 5549950,
+      "protected_actor_sha256": "565e2033a089dcbb48e1e4da9b28bea19fed9510918ef46b7f9c64afef3c9d62",
+      "historical_release_alias_inodes": [
+        6227135,
+        6228731,
+        6228730
+      ],
+      "historical_release_alias_link_counts": [
+        2,
+        2,
+        2
+      ],
+      "integration_backlog_sha256": "2f199c8720cd47ec58ef7a5efbb4773fc8abfda99a65dfc4b46f395b1788a1ac",
+      "integration_index_empty": true
+    },
+    "failures_and_unrun": [
+      "Preparation-only adaptation attempt exited 1 because a temporary helper name shadowed the Python standard library; the renamed helper and read-only checks passed.",
+      "Preparation-only non-root edit of a root-owned candidate record was denied; the authorized exact-root edit succeeded.",
+      "No action failure occurred. No product test, build, doctor, provider, service or installation was performed; wider phase and product qualification remain open."
+    ]
+  },
+  "private_original_custody": {
+    "id": "task05-continuation:original-text-3323",
+    "archive_sha256": "b3a94ca3eb1cc75ad851fdd325dee1bdb08bf7f500d21f57a165ecbdb6172f7f",
+    "member_manifest_sha256": "ee828a5c8c661ef4cef33db9524aca189eb673b8a331132a98e034c3433f8039",
+    "member_count": 3323,
+    "scope": "Original selected small text, generated inputs and diagnostics, with per-member names, sizes and hashes in the private member map.",
+    "limitation": "Private local custody only, not an off-host backup; do not publish original archive, member map or host paths."
+  },
+  "previous_private_original_custody": "task05-integration-debug:three-original-record-archives-and-member-maps",
+  "holds": [
+    "Target root, release root and deps parent, unselected release executables and shared libraries, three exact historical release inode aliases and all other aliases.",
+    "The 517 retained debug entries including the actor, World/Lane and enclosing E3 roots, helpers, source, private targets, musl, installed links, rollback backups and other target children.",
+    "Historical release-root artifact manifest mismatches were present before this selection and remain separate; no restoration or qualification is claimed."
+  ],
+  "future_recipes": {
+    "release": "cargo +1.89.0 build --locked --release --workspace --target x86_64-unknown-linux-gnu --target-dir <fresh-release-target>",
+    "lift": "cargo +1.89.0 check --locked -p substrate-lift --no-default-features --target-dir <fresh-lift-target>",
+    "platform": "x86_64 Linux GNU host; release uses workspace default features",
+    "cargo_lock_sha256": "e997cc8ae39cee20b184895ac6ae0f1300fb1b2bb4e95b68d1b104303a8e3467",
+    "rust_toolchain_toml_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8",
+    "limitations": "Conditional on preserved source, inputs and prerequisites; historical commands are unknown. Neither command proves historical binary identity or future build success."
+  },
+  "limits": [
+    "Selected scope is partial. The previous debug action remains separately accounted.",
+    "Original observations cannot be recreated by a future build.",
+    "No product test, build, doctor, service, provider, installation or product qualification is claimed; wider phase completion remains open."
+  ],
+  "publication": {
+    "receipt_commit": {
+      "state": "pending",
+      "type": "string",
+      "meaning": "Publication commit is recorded outside this self-referential payload after publication."
+    },
+    "remote_content_verification": {
+      "state": "pending",
+      "type": "object",
+      "meaning": "Exact receipt and scoped documentation remote readback after authorized publication."
+    }
+  }
+}
