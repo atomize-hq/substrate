@@ -50,7 +50,9 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:41.073583+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-005",
@@ -230,7 +232,9 @@
       "observed_exists": true,
       "allocation_bytes": 33075200,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:43.136919+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-023",
@@ -250,7 +254,9 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:45.152967+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-025",
@@ -410,7 +416,9 @@
       "observed_exists": true,
       "allocation_bytes": 30031872,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:47.156598+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-041",
@@ -2660,7 +2668,9 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:49.137188+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-266",
@@ -2700,7 +2710,9 @@
       "observed_exists": true,
       "allocation_bytes": 39256064,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:51.112272+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-270",
@@ -3284,7 +3296,9 @@
       "observed_exists": true,
       "allocation_bytes": 380035072,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:37.231524+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-328",
@@ -3294,7 +3308,9 @@
       "observed_exists": true,
       "allocation_bytes": 382136320,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:35.337366+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-329",
@@ -3314,7 +3330,9 @@
       "observed_exists": true,
       "allocation_bytes": 512782336,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:24.564537+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-331",
@@ -3324,7 +3342,9 @@
       "observed_exists": true,
       "allocation_bytes": 428838912,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:26.323648+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-332",
@@ -3344,7 +3364,9 @@
       "observed_exists": true,
       "allocation_bytes": 45285376,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:53.114794+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-334",
@@ -3354,7 +3376,9 @@
       "observed_exists": true,
       "allocation_bytes": 384512000,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:33.277534+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-335",
@@ -3364,7 +3388,9 @@
       "observed_exists": true,
       "allocation_bytes": 386154496,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:29.820650+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-336",
@@ -3374,7 +3400,9 @@
       "observed_exists": true,
       "allocation_bytes": 386347008,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:31.559861+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-337",
@@ -3384,7 +3412,9 @@
       "observed_exists": true,
       "allocation_bytes": 386420736,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:28.068612+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-338",
@@ -3394,7 +3424,9 @@
       "observed_exists": true,
       "allocation_bytes": 44482560,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:55.000309+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-339",
@@ -3404,7 +3436,9 @@
       "observed_exists": true,
       "allocation_bytes": 45699072,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:57.197935+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-340",
@@ -3414,7 +3448,9 @@
       "observed_exists": true,
       "allocation_bytes": 45699072,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:59.228454+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-341",
@@ -3424,7 +3460,9 @@
       "observed_exists": true,
       "allocation_bytes": 45666304,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:08:01.226331+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-342",
@@ -3454,7 +3492,9 @@
       "observed_exists": true,
       "allocation_bytes": 557531136,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:22.793123+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-345",
@@ -3764,7 +3804,9 @@
       "observed_exists": true,
       "allocation_bytes": 32894976,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:08:03.263325+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-376",
@@ -3794,7 +3836,9 @@
       "observed_exists": true,
       "allocation_bytes": 316592128,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "worktree removed 2026-11-09 after source, record and live preflight; see cleanup-receipt-task03-next22.json",
+      "actual_removal_utc": "2026-11-09T18:07:39.167521+00:00",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "id": "inventory-379",
@@ -6376,8 +6420,11 @@
       "head": "7d642606205b4f0f93e157fbde27507a7c86e655",
       "lockfile_sha256_at_head": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/preserve-a1-1d-5r2-2-harness-canonical-closeout-replay-7d642606",
+      "verified_tree": "c6f83fc264304514dde655a0edc2b5dd875bc3e7",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-001",
@@ -6394,8 +6441,11 @@
       "head": "1dc3cc431ba1698717e0da3ff20c22506c53d399",
       "lockfile_sha256_at_head": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/preserve-a1-1d-5r2-2f-readiness-corrected-replayed-f2-2a982292",
+      "verified_tree": "d377ced7c823a841a294fa7de71e0866d58dcd9b",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-003",
@@ -6403,8 +6453,11 @@
       "head": "1dc3cc431ba1698717e0da3ff20c22506c53d399",
       "lockfile_sha256_at_head": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/preserve-a1-1d-5r2-2f-readiness-corrected-replayed-f2-2a982292",
+      "verified_tree": "d377ced7c823a841a294fa7de71e0866d58dcd9b",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-004",
@@ -6430,8 +6483,11 @@
       "head": "b5f2b4f8dd7d9f650c462cd4626a562cacc1d27f",
       "lockfile_sha256_at_head": "6149a745d5bbbaed5d37d0fb5e31a48b1bbb08984cc91a36789c9864c90dcac6",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/preserve-a1-2a-before-wb-b5f2b4f8",
+      "verified_tree": "e7f13fe2db64f8252f7f8b7916130e5b41ba4ca4",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-007",
@@ -6880,8 +6936,11 @@
       "head": "cd9008a6d59acc23163c2bc39cecb571d0283027",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-rm-read-authority-correction-2",
+      "verified_tree": "11c6fe06527fd0a65fb154d84f9b8fee2bf768fc",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-057",
@@ -6907,8 +6966,11 @@
       "head": "6ab6032fe6f0f917be68982adba416d2ded707e3",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/a1-3-public-adoption-doc-correction",
+      "verified_tree": "56b26fdae340262ce644fcd9fcf06552627ffaf1",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-060",
@@ -7435,8 +7497,11 @@
       "head": "57b1719ee4ec92c4b960312a7081a4edbbafcf0e",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-a2-fork-successor-prerequisite",
+      "verified_tree": "b602615dfcd1f9411072ed3129b78c8f03e1c0eb",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-118",
@@ -7444,8 +7509,11 @@
       "head": "d6c06082c9287256a9d56005991bf9962059660c",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-a2-host-execution-episode-demotion",
+      "verified_tree": "cae84c2add3b1820fa305d353b1b09608da1dd94",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-119",
@@ -7462,8 +7530,11 @@
       "head": "bbd5c76626ccb65240a3759ce2b8645764d957b2",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-a3-persistence-compatibility-split",
+      "verified_tree": "4ff7c4dcdf30ad608ad2f41afcad7a9b1a3f3067",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-121",
@@ -7471,8 +7542,11 @@
       "head": "cdfd2a9566ad01d9e05011aff56612698aa7491b",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-a3-rg-base-03-gate-correction",
+      "verified_tree": "42633e3f842ab8a138e2206812c05d06cc855223",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-122",
@@ -7489,8 +7563,11 @@
       "head": "138864a26dbc4721366c6cc8934d464d1929a189",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-b2-2-receipt-material-authority-correction",
+      "verified_tree": "881393e8fc6db7d4422f97cceadfa550d076a14f",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-124",
@@ -7498,8 +7575,11 @@
       "head": "18f719898ce2a48f65e95b3b23f3b2cfd685c4af",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e1-restricted-world-fs-narrowing",
+      "verified_tree": "60e94c7b5c985463d3311b8f556520dea8244287",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-125",
@@ -7507,8 +7587,11 @@
       "head": "ee85025469f62fbb70757627c2f0c7f5ee9fd353",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-authority-correction",
+      "verified_tree": "a2378a1ba57f85d97d7a90f6c96d5506c71e176d",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-126",
@@ -7516,8 +7599,11 @@
       "head": "848fe24b4311f72ebc9d61b4c3408c96613f4334",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 1,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-authority-correction-2",
+      "verified_tree": "265876eb661637c23ff27f51ec388122cb174aea",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-127",
@@ -7525,8 +7611,11 @@
       "head": "0457e90137da5fb3c3a50f4a531d8828864bd1e3",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 3,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-policy-commitments",
+      "verified_tree": "c829688827b21e06bc425f3b58265122da813d63",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-128",
@@ -7534,8 +7623,11 @@
       "head": "848fe24b4311f72ebc9d61b4c3408c96613f4334",
       "lockfile_sha256_at_head": "359ed61cad528cf8bbff961ce71bf908e3149563746a8958c2e6cff41301b1d5",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-authority-correction-2",
+      "verified_tree": "265876eb661637c23ff27f51ec388122cb174aea",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-129",
@@ -7543,8 +7635,11 @@
       "head": "e90e615f9431d91773c497041674331639f33bb6",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-rm-acceptance-wall-correction",
+      "verified_tree": "57cb26b99613843aef7382d7e709564d1da781b9",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-130",
@@ -7552,8 +7647,11 @@
       "head": "5b703b26431f9dee5e9e0686e280536a6fb030c8",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-rm-general-cargo-differential-correction",
+      "verified_tree": "cc442b8a93f357b73cedf58b0cd9d0068fccd0c9",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-131",
@@ -7561,8 +7659,11 @@
       "head": "2020ce1a33288bc8ec0327d75e47257b8abf10d3",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e2-rm-read-authority-correction",
+      "verified_tree": "d1c8bad9bc5235c97aedc125cdcdc1e8af09dec8",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-132",
@@ -7588,8 +7689,11 @@
       "head": "578308836381714f19735e7e2fb993777c284f81",
       "lockfile_sha256_at_head": "e3432ad07c774a490c08ab1587eed81cc6ebe396bd72d8e1d2a2c6c124c959e9",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/runtime-refactor-e3-ac1-projection-authority-correction",
+      "verified_tree": "fb87d382985ec196687e45afc72f916d5d376013",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-135",
@@ -7759,8 +7863,11 @@
       "head": "4eca8773bf1cfaac1e4fcb7ba09b8a06c310ab7c",
       "lockfile_sha256_at_head": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
       "status_entry_count": 0,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/preserve-a1-1d-5r2-2e-historical-authority-corrected-replayed-e-2e36f486",
+      "verified_tree": "a36ab8d1ada740e4b044a05fd70f7cbf3fc299fb",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-154",
@@ -7786,8 +7893,11 @@
       "head": "2e36f4865d4bf26ad062c4da751de61b2c0dadb7",
       "lockfile_sha256_at_head": "43a6456012301fe246948e870b9ca6891ba9530f10aa4c62fbefcd531dfe2b5b",
       "status_entry_count": 2,
-      "source_preservation": "held until exact source, changes, remote and unique inputs verified",
-      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody"
+      "source_preservation": "exact source commit and tracked historical record retrieved from GitHub before removal",
+      "future_recipe": "Rust/Cargo 1.89.0, x86_64-unknown-linux-gnu, dev/default; cargo +1.89.0 build --locked --workspace --target x86_64-unknown-linux-gnu; conditional on input and native dependency custody",
+      "verified_remote_branch": "feat/a1-1d-5r2-2f0-historical-differential-authority-correction",
+      "verified_tree": "1f0f53c7e4440edc42623865dd5925df985e8d03",
+      "cleanup_receipt": "cleanup-receipt-task03-next22.json"
     },
     {
       "group": "repo-157",

@@ -1,6 +1,6 @@
-## Historical worktree recovery — next batch (local draft)
+## Historical worktree recovery — Task03 batch
 
-These immutable source states were fetched from the named advertised GitHub branches. They are cleanup candidates; this draft records no removal. Groups map to the existing inventory index. Branches can move; verify the full commit and tree when retrieving source.
+These immutable source states were fetched from the named advertised GitHub branches. The 22 worktrees were removed on 2026-11-09 after review and fresh preflights; the [receipt](cleanup-receipt-task03-next22.json) records the actions and postchecks. Publication and remote readback of this receipt update remain pending. Groups map to the existing inventory index. Branches can move; verify the full commit and tree when retrieving source.
 
 | Group | Advertised branch | Immutable commit | Tree | Cargo.lock SHA-256 |
 | --- | --- | --- | --- | --- |
