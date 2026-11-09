@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "status": "prospective publication; not yet published or independently reviewed",
+  "base_commit": "cb430f10c575175caca9f5b168c4dc28e8979a1b",
+  "head_commit": "07eda1bfa7dee6a75eb4e372dbec98419830192d",
+  "head_tree": "6469628a1b28785fb5a7be2c8d3f37c8f48d0f00",
+  "proposed_remote_ref": "refs/heads/feat/preserve-task03-07eda1bfa7de",
+  "already_remote_containing_branch": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "patches": [
+    {
+      "file": "e3d-base-to-head.patch",
+      "mode": "100644",
+      "sha256": "38b4646112de5797674ca181211bd626ef869753dc9b45e9baf1e38393a13469"
+    },
+    {
+      "file": "e3d-head-to-working.patch",
+      "mode": "100644",
+      "sha256": "79db05995ab33f6b1572473f222de1ac5615214357d4c26274e4b136b83b5880"
+    }
+  ],
+  "working_files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "a65fb5ed8b930ea30cdbc18090312c63009b83be36a235bda61df74a5abfa05d",
+      "mode": "100644"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "94cc2b39b4ce962eb0f3ecc794a86d31611f08096a219bb5aa8b0de12cf45bd2",
+      "mode": "100644"
+    }
+  ],
+  "stage": "empty",
+  "historical_limit": "This records source and selected inputs, not product acceptance or exact native build outputs."
+}

@@ -1,0 +1,2539 @@
+diff --git a/crates/shell/src/builtins/world_gateway.rs b/crates/shell/src/builtins/world_gateway.rs
+index d8b10b2ae7c6525745b01facf4417030c75e892b..14f57306309d1e4d18836d12ea3846d57f467f93 100644
+--- a/crates/shell/src/builtins/world_gateway.rs
++++ b/crates/shell/src/builtins/world_gateway.rs
+@@ -437,6 +437,23 @@ fn build_gateway_request_context(
+     world: bool,
+     launch_cwd: &Path,
+     #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
++) -> anyhow::Result<GatewayLifecycleRequestContext> {
++    build_gateway_request_context_with_selection(
++        no_world,
++        world,
++        launch_cwd,
++        #[cfg(unix)]
++        install_context,
++        None,
++    )
++}
++
++fn build_gateway_request_context_with_selection(
++    no_world: bool,
++    world: bool,
++    launch_cwd: &Path,
++    #[cfg(unix)] install_context: &InstallBootstrapContextCarrierV1,
++    initial: Option<(&str, transport_api_types::InitialCodexModel)>,
+ ) -> anyhow::Result<GatewayLifecycleRequestContext> {
+     #[cfg(not(unix))]
+     {
+@@ -481,7 +498,7 @@ fn build_gateway_request_context(
+         } else {
+             None
+         };
+-        let (effective_config, config_explain) =
++        let (mut effective_config, config_explain) =
+             config_model::resolve_effective_config_with_explain_for_bootstrap_home(
+                 &cwd,
+                 &CliConfigOverrides {
+@@ -497,12 +514,38 @@ fn build_gateway_request_context(
+                 &cwd,
+                 &bootstrap_home,
+             )?;
+-        let selected_backend = effective_config
+-            .llm
+-            .routing
+-            .default_backend
+-            .trim()
+-            .to_string();
++        if initial.is_some()
++            && !matches!(
++                effective_config.llm.routing.default_backend.trim(),
++                "cli:codex" | "cli:codex-host" | "cli:codex-world"
++            )
++        {
++            return Err(gateway_invalid_integration_error(
++                "initial model conflicts with configured gateway backend",
++            ));
++        }
++        let selected_backend = initial
++            .map(|(backend, _)| backend.to_string())
++            .unwrap_or_else(|| {
++                effective_config
++                    .llm
++                    .routing
++                    .default_backend
++                    .trim()
++                    .to_string()
++            });
++        if initial.is_some()
++            && (!effective_config.world.enabled
++                || !effective_config.llm.gateway.enabled
++                || effective_config.llm.gateway.mode != LlmGatewayMode::InWorld)
++        {
++            return Err(gateway_policy_blocked_error(
++                "initial model requires enabled world and in_world gateway",
++            ));
++        }
++        if initial.is_some() {
++            effective_config.llm.routing.default_backend = selected_backend.clone();
++        }
+         let backend_entry = validate_gateway_backend_selection(
+             &cwd,
+             &effective_policy,
+@@ -534,8 +577,14 @@ fn build_gateway_request_context(
+         );
+         env.insert(
+             "SUBSTRATE_LLM_DEFAULT_BACKEND".to_string(),
+-            effective_config.llm.routing.default_backend.clone(),
++            selected_backend.clone(),
+         );
++        if let Some((_, model)) = initial {
++            env.insert(
++                transport_api_types::INITIAL_CODEX_MODEL_ENV.to_string(),
++                model.as_str().to_string(),
++            );
++        }
+         #[cfg(target_os = "macos")]
+         if effective_config.llm.gateway.mode == LlmGatewayMode::InWorld {
+             env.insert(
+@@ -592,6 +641,80 @@ fn build_gateway_request_context(
+     }
+ }
+ 
++#[cfg(test)]
++thread_local! {
++    static INITIAL_GATEWAY_TEST_TRANSPORT: std::cell::RefCell<Option<Box<dyn Fn(&GatewayLifecycleRequestV1) -> anyhow::Result<GatewayLifecycleResponseV1>>>> = std::cell::RefCell::new(None);
++}
++
++#[cfg(test)]
++pub(crate) fn with_initial_gateway_test_transport<T>(
++    transport: impl Fn(&GatewayLifecycleRequestV1) -> anyhow::Result<GatewayLifecycleResponseV1>
++        + 'static,
++    test: impl FnOnce() -> T,
++) -> T {
++    struct Reset;
++    impl Drop for Reset {
++        fn drop(&mut self) {
++            INITIAL_GATEWAY_TEST_TRANSPORT.with(|slot| {
++                slot.borrow_mut().take();
++            });
++        }
++    }
++    INITIAL_GATEWAY_TEST_TRANSPORT
++        .with(|slot| assert!(slot.borrow_mut().replace(Box::new(transport)).is_none()));
++    let _reset = Reset;
++    test()
++}
++
++/// Uses the same authenticated config/account preparation and lifecycle transport
++/// as world gateway sync; the native child receives only the returned loopback URL.
++#[cfg(target_os = "linux")]
++pub(crate) fn prepare_initial_codex_gateway(
++    accepted_home: &Path,
++    cwd: &Path,
++    backend: &str,
++    model: transport_api_types::InitialCodexModel,
++) -> anyhow::Result<String> {
++    let (principal, _) = crate::execution::install_bootstrap::current_unix_principal_and_home()?;
++    let transport_api_types::PlatformPrincipalV1::Unix { account, uid } = principal else {
++        anyhow::bail!("initial gateway requires Unix principal");
++    };
++    let context = transport_api_types::InstallBootstrapContextV1::new_unix(
++        accepted_home
++            .to_str()
++            .ok_or_else(|| anyhow::anyhow!("accepted home is not UTF-8"))?,
++        &account,
++        uid,
++    )?;
++    let carrier = InstallBootstrapContextCarrierV1::from_context(context)?;
++    let request = build_gateway_request_context_with_selection(
++        false,
++        false,
++        cwd,
++        &carrier,
++        Some((backend, model)),
++    )?;
++    #[cfg(test)]
++    let controlled = INITIAL_GATEWAY_TEST_TRANSPORT.with(|slot| {
++        slot.borrow()
++            .as_ref()
++            .map(|transport| transport(&request.request))
++    });
++    #[cfg(not(test))]
++    let controlled: Option<anyhow::Result<GatewayLifecycleResponseV1>> = None;
++    let response = match controlled {
++        Some(response) => response?,
++        None => call_gateway_action(GatewayAction::Sync, &request)?,
++    };
++    let wiring = response
++        .client_wiring
++        .ok_or_else(|| anyhow::anyhow!("managed gateway is unavailable"))?;
++    Ok(format!(
++        "{}/v1",
++        wiring.openai_base_url.trim_end_matches('/')
++    ))
++}
++
+ fn derive_gateway_identity_tuple(
+     agent_id: &str,
+     effective_policy: &substrate_broker::Policy,
+diff --git a/crates/shell/src/execution/agent_runtime/control.rs b/crates/shell/src/execution/agent_runtime/control.rs
+index 18d925884b48ab41ccfcd260d2c43a583d6be185..33cc27d88ed82494212473a9db3f5c4b557df12b 100644
+--- a/crates/shell/src/execution/agent_runtime/control.rs
++++ b/crates/shell/src/execution/agent_runtime/control.rs
+@@ -1,3 +1,6 @@
++#[path = "native_launch_context.rs"]
++pub(crate) mod native_launch_context;
++
+ use std::collections::{BTreeMap, BTreeSet};
+ use std::env;
+ use std::fs;
+@@ -1124,6 +1127,8 @@ pub(crate) struct HiddenOwnerHelperParticipantPlan {
+ #[allow(dead_code)]
+ #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+ pub(crate) struct HiddenOwnerHelperStartupPromptPlan {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub initial_model: Option<transport_api_types::InitialCodexModel>,
+     pub prompt_text: String,
+     pub stream_path: PathBuf,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+@@ -1461,6 +1466,34 @@ pub(crate) fn launch_hidden_owner_helper_for_durable_start(
+     })
+ }
+ 
++// Tests replace only the child transport. The production permit, persisted
++// plan, inherited guard validation, launch observation and helper remain real.
++#[cfg(all(test, target_os = "linux"))]
++type SuccessorTestCommand = Box<dyn Fn(&Path) -> Result<Command>>;
++#[cfg(all(test, target_os = "linux"))]
++thread_local! {
++    static SUCCESSOR_TEST_COMMAND: std::cell::RefCell<Option<SuccessorTestCommand>> = const { std::cell::RefCell::new(None) };
++}
++#[cfg(all(test, target_os = "linux"))]
++pub(crate) fn with_successor_test_command<T>(
++    factory: impl Fn(&Path) -> Result<Command> + 'static,
++    run: impl FnOnce() -> T,
++) -> T {
++    struct Reset;
++    impl Drop for Reset {
++        fn drop(&mut self) {
++            SUCCESSOR_TEST_COMMAND.with(|slot| {
++                slot.replace(None);
++            });
++        }
++    }
++    SUCCESSOR_TEST_COMMAND.with(|slot| {
++        assert!(slot.replace(Some(Box::new(factory))).is_none());
++    });
++    let _reset = Reset;
++    run()
++}
++
+ /// Launches an already-applied HSA Attach or ResumeOneTurn without consulting
+ /// legacy readiness or compatibility state. Durable HSA reconciliation is the
+ /// caller's only completion authority.
+@@ -1506,6 +1539,12 @@ pub(crate) fn launch_authority_managed_successor_owner_helper(
+         .stdin(Stdio::null())
+         .stdout(Stdio::null())
+         .stderr(Stdio::null());
++    #[cfg(test)]
++    if let Some(controlled) = SUCCESSOR_TEST_COMMAND
++        .with(|slot| slot.borrow().as_ref().map(|factory| factory(&plan_path)))
++    {
++        command = controlled?;
++    }
+     let launch_guard_fd = launch_guard.lock_file.as_raw_fd();
+     command.env(
+         AUTHORITY_SUCCESSOR_LAUNCH_GUARD_FD_ENV,
+@@ -4141,13 +4180,16 @@ pub(crate) fn maybe_build_runtime_owned_toolbox_env(
+ #[cfg(target_os = "linux")]
+ fn prompt_submission_episode_for_runtime(
+     runtime: &PromptSubmitRuntime,
+-) -> Result<Option<HostExecutionEpisodeObserverV1>> {
++) -> Result<(
++    Option<HostExecutionEpisodeObserverV1>,
++    Option<crate::execution::agent_runtime::host_session_authority::ResolvedCurrentAuthorityV1>,
++)> {
+     let substrate_home = substrate_paths::substrate_home()?;
+     if !substrate_home
+         .join("authority-v1/state-root-v1.json")
+         .exists()
+     {
+-        return Ok(None);
++        return Ok((None, None));
+     }
+     let authority = HostSessionAuthority::from_trusted_root(
+         TrustedAuthorityRoot::open(&substrate_home)
+@@ -4167,7 +4209,7 @@ fn prompt_submission_episode_for_runtime(
+         .session_namespace_map
+         .contains_key(orchestration_session_id)
+     {
+-        return Ok(None);
++        return Ok((None, None));
+     }
+     let current = authority
+         .resolve_current_exact(orchestration_session_id, None)
+@@ -4208,7 +4250,10 @@ fn prompt_submission_episode_for_runtime(
+         },
+     )?;
+     episode.validate_current_authority(&binding, &current)?;
+-    HostExecutionEpisodeObserverV1::new(episode, binding).map(Some)
++    Ok((
++        Some(HostExecutionEpisodeObserverV1::new(episode, binding)?),
++        Some(current),
++    ))
+ }
+ 
+ #[cfg(target_os = "linux")]
+@@ -4233,7 +4278,7 @@ where
+     F: FnMut(SubmittedPromptStreamEvent),
+ {
+     #[cfg(target_os = "linux")]
+-    let episode_observer = prompt_submission_episode_for_runtime(runtime)?;
++    let (episode_observer, current_authority) = prompt_submission_episode_for_runtime(runtime)?;
+     #[cfg(target_os = "linux")]
+     observe_prompt_submission_episode(
+         episode_observer.as_ref(),
+@@ -4271,6 +4316,12 @@ where
+             build_session_resume_extension(&continuity_session_id),
+         )]),
+     };
++    #[cfg(target_os = "linux")]
++    let prompt_fulfillment = if let Some(current) = current_authority.as_ref() {
++        prompt_fulfillment.with_authenticated_context(current, &runtime.descriptor.backend_id)?
++    } else {
++        prompt_fulfillment
++    };
+     let control = prompt_fulfillment
+         .run_control(request)
+         .await
+@@ -7376,6 +7427,7 @@ mod tests {
+             },
+             host_attach_contract: None,
+             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
++                initial_model: None,
+                 prompt_text: "hello".to_string(),
+                 stream_path: PathBuf::from("/tmp/startup.sock"),
+                 request_key_sha256: None,
+@@ -7419,6 +7471,7 @@ mod tests {
+             },
+             host_attach_contract: None,
+             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
++                initial_model: None,
+                 prompt_text: "hello".to_string(),
+                 stream_path: PathBuf::from("/tmp/startup.sock"),
+                 request_key_sha256: None,
+diff --git a/crates/shell/src/execution/agents_cmd.rs b/crates/shell/src/execution/agents_cmd.rs
+index 94ca946615a6f3731778d3b9fcc4c72e75ebae32..0f465e19b6b7f6c011ad569d91d4e0b7d8f7cb6b 100644
+--- a/crates/shell/src/execution/agents_cmd.rs
++++ b/crates/shell/src/execution/agents_cmd.rs
+@@ -414,6 +414,7 @@ struct StartPromptPublicIdentity {
+ 
+ #[derive(Debug)]
+ struct HostStartLaunchPlan {
++    initial_model: Option<transport_api_types::InitialCodexModel>,
+     helper_plan: HiddenOwnerHelperLaunchPlan,
+     resolved_contract: ResolvedLaunchContract,
+     public_identity: StartPromptPublicIdentity,
+@@ -512,6 +513,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+         )
+     }) {
+         start_plan.helper_plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
++            initial_model: start_plan.initial_model,
+             prompt_text: startup_prompt_text.clone(),
+             stream_path: PathBuf::from("/tmp/substrate-public-start-transport-pending"),
+             request_key_sha256: Some(request_key_sha256.clone()),
+@@ -527,6 +529,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+         helper_plan,
+         resolved_contract,
+         public_identity,
++        initial_model,
+     } = start_plan;
+ 
+     #[cfg(not(unix))]
+@@ -595,6 +598,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+         )
+         .map_err(runtime_start_error)?;
+         plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
++            initial_model,
+             prompt_text: startup_prompt_text.clone(),
+             stream_path: startup_listener.path().to_path_buf(),
+             request_key_sha256: Some(request_key_sha256.clone()),
+@@ -709,7 +713,7 @@ fn public_start_request_key(
+     public_backend_id: &str,
+     public_scope: AgentExecutionScope,
+ ) -> Result<String> {
+-    let stable_request = serde_json::json!({
++    let mut stable_request = serde_json::json!({
+         "schema_version": 1,
+         "descriptor": &plan.helper_plan.descriptor,
+         "workspace_root": &plan.helper_plan.session.workspace_root,
+@@ -721,6 +725,9 @@ fn public_start_request_key(
+         },
+         "prompt_sha256": prompt_sha256,
+     });
++    if let Some(model) = plan.initial_model {
++        stable_request["initial_model"] = serde_json::json!(model);
++    }
+     let bytes = serde_json::to_vec(&stable_request)
+         .context("failed to encode the durable public Start request key")?;
+     Ok(public_start_digest(
+@@ -729,6 +736,49 @@ fn public_start_request_key(
+     ))
+ }
+ 
++/// Connected tests use the production public parser, configuration, resolution,
++/// request commitment and helper metadata before selecting a controlled transport.
++#[cfg(test)]
++pub(crate) fn public_start_plan_for_test(
++    argv: &[&str],
++    stream_path: &Path,
++) -> Result<HiddenOwnerHelperLaunchPlan> {
++    use clap::Parser;
++    let cli = Cli::try_parse_from(argv)?;
++    let Some(crate::execution::cli::SubCommands::Agent(AgentCmd {
++        action: AgentAction::Start(args),
++    })) = &cli.sub
++    else {
++        anyhow::bail!("expected public agent start");
++    };
++    let context = resolve_command_context(&cli)?;
++    let mut plan = build_start_launch_plan(args, &context)?;
++    let prompt = load_public_prompt_source(&PublicPromptInput {
++        prompt: args.prompt_source.prompt.clone(),
++        prompt_file: args.prompt_source.prompt_file.clone(),
++    })?;
++    let prompt_sha256 = public_start_digest(
++        "substrate.a1.3-p1.public-start-prompt.v1",
++        &[prompt.prompt_text.as_bytes()],
++    );
++    let request_key = public_start_request_key(
++        &plan,
++        &prompt_sha256,
++        &plan.public_identity.backend_id,
++        plan.public_identity.scope,
++    )?;
++    plan.helper_plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
++        initial_model: plan.initial_model,
++        prompt_text: prompt.prompt_text,
++        stream_path: stream_path.to_path_buf(),
++        request_key_sha256: Some(request_key),
++        prompt_sha256: Some(prompt_sha256),
++        public_backend_id: Some(plan.public_identity.backend_id),
++        public_scope: Some(plan.public_identity.scope),
++    });
++    Ok(plan.helper_plan)
++}
++
+ #[cfg(unix)]
+ fn public_start_authority() -> Result<HostSessionAuthority> {
+     let substrate_home = substrate_paths::substrate_home()?;
+@@ -1099,6 +1149,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
+                     )
+                     .map_err(runtime_start_error)?;
+                     launch.helper_plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
++                        initial_model: None,
+                         prompt_text: exact_prompt,
+                         stream_path: startup_listener.path().to_path_buf(),
+                         request_key_sha256: None,
+@@ -1223,6 +1274,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
+             &context.base_policy,
+         );
+         plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
++            initial_model: None,
+             prompt_text: maybe_compose_prompt_with_authoritative_host_toolbox_contract(
+                 &prompt.prompt_text,
+                 host_toolbox_surface_authoritative,
+@@ -2148,10 +2200,41 @@ fn build_start_launch_plan(
+     args: &AgentStartArgs,
+     context: &AgentCommandContext,
+ ) -> Result<HostStartLaunchPlan> {
+-    match resolve_requested_start_scope(args, context)? {
+-        AgentExecutionScope::Host => build_host_start_launch_plan(args, context),
+-        AgentExecutionScope::World => build_world_start_session_birth_plan(args, context),
++    let plan = match resolve_requested_start_scope(args, context)? {
++        AgentExecutionScope::Host => build_host_start_launch_plan(args, context)?,
++        AgentExecutionScope::World => build_world_start_session_birth_plan(args, context)?,
++    };
++    if args.model.is_some() {
++        if !cfg!(target_os = "linux")
++            || plan.helper_plan.descriptor.backend_kind != ResolvedRuntimeBackendKind::Codex
++            || !matches!(
++                plan.helper_plan.descriptor.backend_id.as_str(),
++                "cli:codex" | "cli:codex-host"
++            )
++        {
++            anyhow::bail!(config_model::user_error(
++                "initial model requires an actual Linux host Codex orchestrator"
++            ));
++        }
++        if !context.effective_config.world.enabled
++            || !context.effective_config.llm.gateway.enabled
++            || context.effective_config.llm.gateway.mode != config_model::LlmGatewayMode::InWorld
++        {
++            anyhow::bail!(config_model::user_error(
++                "initial model requires an enabled in_world gateway and world"
++            ));
++        }
++        if !matches!(
++            context.effective_config.llm.routing.default_backend.trim(),
++            "cli:codex" | "cli:codex-host" | "cli:codex-world"
++        ) {
++            anyhow::bail!(config_model::user_error(
++                "initial Codex model conflicts with configured gateway backend"
++            ));
++        }
++        super::agent_runtime::control::native_launch_context::validate_native_posture()?;
+     }
++    Ok(plan)
+ }
+ 
+ fn build_host_start_launch_plan(
+@@ -2209,6 +2292,7 @@ fn build_host_start_launch_plan(
+ 
+     let orchestration_session_id = Uuid::now_v7().to_string();
+     Ok(HostStartLaunchPlan {
++        initial_model: args.model,
+         helper_plan: HiddenOwnerHelperLaunchPlan {
+             mode: OwnerHelperMode::Start,
+             descriptor: (&descriptor).into(),
+@@ -2318,6 +2402,7 @@ fn build_world_start_session_birth_plan(
+ 
+     let orchestration_session_id = Uuid::now_v7().to_string();
+     Ok(HostStartLaunchPlan {
++        initial_model: args.model,
+         helper_plan: HiddenOwnerHelperLaunchPlan {
+             mode: OwnerHelperMode::Start,
+             descriptor: (&descriptor).into(),
+@@ -6553,8 +6638,1123 @@ mod tests {
+             .collect()
+     }
+ 
++    #[cfg(target_os = "linux")]
++    #[test]
++    #[serial]
++    fn test_initial_model_public_preparation_rejects_unsupported_actual_backend_mode_and_policy() {
++        let mut args = host_start_args();
++        args.model = Some(transport_api_types::InitialCodexModel::Gpt6Astra);
++        let mut config = effective_config_for_test(AgentExecutionScope::Host);
++        config.llm.routing.default_backend = "cli:codex-host".to_string();
++        config.world.enabled = true;
++        config.llm.gateway.enabled = true;
++        config.llm.gateway.mode = config_model::LlmGatewayMode::InWorld;
++        let inventory = inventory_for_test(vec![inventory_entry_for_test(
++            "codex-host",
++            "codex",
++            AgentExecutionScope::Host,
++        )]);
++        let context = command_context_for_test(
++            config.clone(),
++            base_policy_for_test(&["cli:codex-host"]),
++            inventory.clone(),
++        );
++        let selected = build_start_launch_plan(&args, &context).unwrap();
++        let selected_key = public_start_request_key(
++            &selected,
++            &"a".repeat(64),
++            "cli:codex-host",
++            AgentExecutionScope::Host,
++        )
++        .unwrap();
++        args.model = None;
++        let default = build_start_launch_plan(&args, &context).unwrap();
++        let default_key = public_start_request_key(
++            &default,
++            &"a".repeat(64),
++            "cli:codex-host",
++            AgentExecutionScope::Host,
++        )
++        .unwrap();
++        assert_ne!(selected_key, default_key);
++        // Independently reconstruct the unchanged omitted request preimage.
++        let original = serde_json::json!({"schema_version":1,"descriptor": &default.helper_plan.descriptor,"workspace_root":&default.helper_plan.session.workspace_root,"host_attach_contract":&default.helper_plan.host_attach_contract,"public_backend_id":"cli:codex-host","public_scope":"host","prompt_sha256":"a".repeat(64)});
++        assert_eq!(
++            default_key,
++            public_start_digest(
++                "substrate.a1.3-p1.public-start-request.v1",
++                &[&serde_json::to_vec(&original).unwrap()]
++            )
++        );
++        args.model = Some(transport_api_types::InitialCodexModel::Gpt6Astra);
++        for world_enabled in [true, false] {
++            let mut invalid = config.clone();
++            invalid.world.enabled = world_enabled;
++            if world_enabled {
++                invalid.llm.gateway.mode = config_model::LlmGatewayMode::HostOnly;
++            }
++            assert!(build_start_launch_plan(
++                &args,
++                &command_context_for_test(
++                    invalid,
++                    base_policy_for_test(&["cli:codex-host"]),
++                    inventory.clone()
++                )
++            )
++            .is_err());
++        }
++        let mut mismatched = config.clone();
++        mismatched.llm.routing.default_backend = "api:openai".to_string();
++        assert!(build_start_launch_plan(
++            &args,
++            &command_context_for_test(
++                mismatched,
++                base_policy_for_test(&["cli:codex-host"]),
++                inventory.clone()
++            )
++        )
++        .is_err());
++        let mut disabled = config.clone();
++        disabled.llm.gateway.enabled = false;
++        assert!(build_start_launch_plan(
++            &args,
++            &command_context_for_test(
++                disabled,
++                base_policy_for_test(&["cli:codex-host"]),
++                inventory.clone()
++            )
++        )
++        .is_err());
++        assert!(build_start_launch_plan(
++            &args,
++            &command_context_for_test(config.clone(), base_policy_for_test(&[]), inventory)
++        )
++        .is_err());
++        args.backend = "cli:claude_code-host".to_string();
++        let mut claude = config;
++        claude.agents.hub.orchestrator_agent_id = "claude_code-host".to_string();
++        let context = command_context_for_test(
++            claude,
++            base_policy_for_test(&["cli:claude_code-host"]),
++            inventory_for_test(vec![inventory_entry_for_test(
++                "claude_code-host",
++                "claude_code",
++                AgentExecutionScope::Host,
++            )]),
++        );
++        assert!(build_start_launch_plan(&args, &context).is_err());
++    }
++
++    #[cfg(target_os = "linux")]
++    #[test]
++    #[serial]
++    fn test_initial_model_supported_start_resume_and_refusals() {
++        use std::os::fd::AsRawFd;
++        use std::os::unix::fs::PermissionsExt;
++        use std::sync::atomic::{AtomicU32, Ordering};
++        struct OwnedFakeGateway(Arc<AtomicU32>);
++        impl Drop for OwnedFakeGateway {
++            fn drop(&mut self) {
++                let pid = self.0.load(Ordering::SeqCst);
++                if pid != 0 {
++                    unsafe {
++                        libc::kill(pid as i32, libc::SIGTERM);
++                        libc::waitpid(pid as i32, std::ptr::null_mut(), 0);
++                    }
++                }
++            }
++        }
++        const CASE_ENV: &str = "SUBSTRATE_TASK11_CONNECTED_SCOPE";
++        let selected_scope = match std::env::var(CASE_ENV) {
++            Ok(scope) => scope,
++            Err(_) => {
++                // The real helper owns a process-global signal handler. Give
++                // each real public startup its normal process lifetime.
++                for (scope, proof_case) in [
++                    ("host", "supported"),
++                    ("world", "supported"),
++                    ("host", "refusal"),
++                    ("world", "refusal"),
++                ] {
++                    let output = std::process::Command::new(std::env::current_exe().unwrap())
++                        .args(["--exact", "execution::agents_cmd::tests::test_initial_model_supported_start_resume_and_refusals", "--nocapture", "--test-threads=1"])
++                        .env(CASE_ENV, scope).env("SUBSTRATE_TASK11_PROOF_CASE", proof_case).output().unwrap();
++                    eprintln!(
++                        "controlled {scope} child stdout: {}",
++                        String::from_utf8_lossy(&output.stdout)
++                    );
++                    eprintln!(
++                        "controlled {scope} child stderr: {}",
++                        String::from_utf8_lossy(&output.stderr)
++                    );
++                    assert!(
++                        output.status.success(),
++                        "controlled public {scope} startup failed: {}",
++                        output.status
++                    );
++                }
++                return;
++            }
++        };
++        assert!(matches!(selected_scope.as_str(), "host" | "world"));
++        let proof_case = std::env::var("SUBSTRATE_TASK11_PROOF_CASE").unwrap();
++        assert!(matches!(proof_case.as_str(), "supported" | "refusal"));
++        for scope in [selected_scope.as_str()] {
++            let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
++            let parent = std::env::var_os("XDG_RUNTIME_DIR")
++                .map(PathBuf::from)
++                .unwrap_or_else(|| {
++                    PathBuf::from(
++                        std::env::var_os("HOME").expect("private authority fixture parent"),
++                    )
++                    .join(".cache")
++                });
++            let temp = tempfile::Builder::new()
++                .prefix("s")
++                .rand_bytes(2)
++                .tempdir_in(parent)
++                .unwrap();
++            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
++            let home = temp.path().join("h");
++            let workspace = temp.path().join("workspace");
++            fs::create_dir_all(home.join("agents")).unwrap();
++            fs::create_dir_all(&workspace).unwrap();
++            fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
++            fs::set_permissions(home.join("agents"), fs::Permissions::from_mode(0o700)).unwrap();
++            authority_env.install_home(&home);
++            let _cwd = crate::execution::ProcessCwdTestGuard::change_to(&workspace);
++            fs::write(home.join("config.yaml"), "world:\n  enabled: true\nagents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\nllm:\n  enabled: true\n  gateway:\n    enabled: true\n    mode: in_world\n  routing:\n    default_backend: cli:codex-host\n").unwrap();
++            fs::write(home.join("policy.yaml"), "agents:\n  allowed_backends: [cli:codex-host, cli:codex-world]\nllm:\n  allowed_backends: [cli:codex-host, cli:codex-world]\n  secrets:\n    env_allowed: [SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN, SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID]\n").unwrap();
++            let native = temp.path().join("fake-native.py");
++            let gateway = temp.path().join("fake-gateway.py");
++            let root_json = serde_json::to_string(&temp.path().display().to_string()).unwrap();
++            fs::write(&native, r#"#!/usr/bin/python3
++import json,os,sys
++from pathlib import Path
++root=Path(__ROOT__)
++import traceback
++sys.excepthook=lambda kind,value,tb:(root/'native-error.txt').write_text(''.join(traceback.format_exception(kind,value,tb)))
++a=sys.argv[1:]
++assert not os.environ.get('CODEX_ACCESS_TOKEN')
++assert not os.environ.get('SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN')
++assert not os.environ.get('SUBSTRATE_LLM_AUTH_BUNDLE_FD')
++assert os.environ['SUBSTRATE_AGENT_TOOLBOX_ENDPOINT'].startswith('unix://')
++assert os.environ['SUBSTRATE_AGENT_TOOLBOX_VERSION']=='1'
++assert all('SYNTHETIC_GATEWAY_SECRET' not in os.readlink(p) for p in Path('/proc/self/fd').iterdir() if p.exists())
++for key in ['OPENAI_API_KEY','OPENAI_ACCESS_TOKEN','OPENAI_BASE_URL','OPENAI_ORGANIZATION','OPENAI_PROJECT','CODEX_API_KEY','ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','ANTHROPIC_BASE_URL','SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID','SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY','SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY','SUBSTRATE_INTERNAL_CODEX_AUTH_SEED_HOME','CODEX_REFRESH_TOKEN_URL_OVERRIDE','CODEX_REVOKE_TOKEN_URL_OVERRIDE','CODEX_APP_SERVER_LOGIN_CLIENT_ID','CODEX_OSS_BASE_URL','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy']:assert os.environ.get(key)=='',key
++for key in ['NO_PROXY','no_proxy']:assert os.environ.get(key)=='127.0.0.1,::1,localhost',key
++for key in ['OPENAI_FEDERATION_RULE_ID','OPENAI_IDENTITY_TOKEN_FILE','OPENAI_WORKLOAD_IDENTITY_CONTEXT']:assert key not in os.environ,key
++for p in Path('/proc/self/fd').iterdir():
++ try:target=os.readlink(p)
++ except FileNotFoundError:continue
++ assert target!=str(root/'sensitive-auth-fd'),target
++if '--help' in a or '--version' in a or 'features' in a:
++ with (root/'native-probes.jsonl').open('a') as f:f.write(json.dumps({'argv':a,'credential_present':False})+'\n')
++ print('[]' if 'features' in a else 'codex 0.156.1 exec resume --model --json --color --output-last-message --dangerously-bypass-approvals-and-sandbox');raise SystemExit(0)
++configs=[a[i+1] for i,v in enumerate(a) if v=='--config']
++assert 'model="gpt-6-astra"' in configs
++assert 'model_provider="openai"' in configs
++assert 'cli_auth_credentials_store="ephemeral"' in configs
++base=next(v for v in configs if v.startswith('openai_base_url='))
++assert 'http://127.0.0.1:' in base and '/v1' in base
++resume='resume' in a
++assert ('--model' in a) != resume
++home=Path(os.environ['CODEX_HOME']); assert home.is_dir()
++with (root/'native-captures.jsonl').open('a') as f:f.write(json.dumps({'argv':a,'home':str(home),'base':base,'credential_present':False})+'\n')
++(home/'config.toml').write_text("model='SYNTHETIC_CHILD_CHANGED'\nmodel_provider='SYNTHETIC_CHILD_PROVIDER'\n[model_providers.openai]\nname='SYNTHETIC_CHILD_PROVIDER'\nexperimental_bearer_token='SYNTHETIC_CHILD_BEARER'\n")
++if '--output-last-message' in a:Path(a[a.index('--output-last-message')+1]).write_text('selected complete')
++_=sys.stdin.read()
++for e in [{'type':'thread.started','thread_id':'selected-native-thread'},{'type':'turn.started','thread_id':'selected-native-thread','turn_id':'turn-1'},{'type':'turn.completed','thread_id':'selected-native-thread','turn_id':'turn-1'}]:print(json.dumps(e),flush=True)
++if not resume:
++ import signal
++ signal.signal(signal.SIGINT,lambda *_:sys.exit(0));signal.signal(signal.SIGTERM,lambda *_:sys.exit(0))
++ while True:signal.pause()
++"#.replace("__ROOT__", &root_json)).unwrap();
++            fs::write(&gateway, r#"#!/usr/bin/python3
++import http.server,json,os,re,sys
++from pathlib import Path
++root=Path(__ROOT__)
++config_path=os.environ['SUBSTRATE_LLM_GATEWAY_CONFIG_PATH']
++assert sys.argv[sys.argv.index('--config')+1]==config_path
++config=Path(config_path).read_text()
++(root/'gateway-config.toml').write_text(config)
++with os.fdopen(int(os.environ['SUBSTRATE_LLM_AUTH_BUNDLE_FD']),'rb') as f:bundle=json.loads(f.read())
++assert bundle['fields']['SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN']=='SYNTHETIC_GATEWAY_SECRET'
++assert not os.environ.get('SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN')
++(root/'gateway-bundle.json').write_text(json.dumps(bundle))
++port=int(re.search(r'^port = (\d+)$',config,re.M).group(1))
++class Handler(http.server.BaseHTTPRequestHandler):
++ def do_GET(self):
++  with (root/'gateway-requests.jsonl').open('a') as f:f.write(json.dumps({'method':'GET','path':self.path})+'\n')
++  self.send_response(200);self.end_headers();self.wfile.write(b'ok')
++ def do_POST(self):
++  with (root/'gateway-requests.jsonl').open('a') as f:f.write(json.dumps({'method':'POST','path':self.path})+'\n')
++  self.send_response(500);self.end_headers()
++ def log_message(self,*args):pass
++http.server.HTTPServer(('127.0.0.1',port),Handler).serve_forever()
++"#.replace("__ROOT__", &root_json)).unwrap();
++            for path in [&native, &gateway] {
++                fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
++            }
++            for (id, placement) in [("codex-host", "host"), ("codex-world", "world")] {
++                let yaml = format!("version: 1\nid: {id}\nconfig:\n  kind: cli\n  protocol: substrate.agent.session\n  execution:\n    scope: {placement}\n  cli:\n    binary: {}\n    mode: persistent\n    runtime_family: codex\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n", native.display());
++                fs::write(home.join("agents").join(format!("{id}.yaml")), yaml).unwrap();
++            }
++            for path in [
++                home.join("config.yaml"),
++                home.join("policy.yaml"),
++                home.join("agents/codex-host.yaml"),
++                home.join("agents/codex-world.yaml"),
++            ] {
++                fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
++            }
++            let _toolbox = EnvVarGuard::set(
++                "SUBSTRATE_AGENT_TOOLBOX_ENDPOINT",
++                Path::new("unix:///synthetic-toolbox.sock"),
++            );
++            let _toolbox_version =
++                EnvVarGuard::set("SUBSTRATE_AGENT_TOOLBOX_VERSION", Path::new("1"));
++            let _auth = EnvVarGuard::set(
++                "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
++                Path::new("SYNTHETIC_GATEWAY_SECRET"),
++            );
++            let _native_auth = EnvVarGuard::set(
++                "CODEX_ACCESS_TOKEN",
++                Path::new("SYNTHETIC_NATIVE_PARENT_SECRET"),
++            );
++            let _account = EnvVarGuard::set(
++                "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
++                Path::new("synthetic-account"),
++            );
++            let auth_fd_path = temp.path().join("sensitive-auth-fd");
++            fs::write(&auth_fd_path, b"SYNTHETIC_GATEWAY_SECRET").unwrap();
++            let auth_fd = std::fs::File::open(&auth_fd_path).unwrap();
++            let _auth_fd = EnvVarGuard::set(
++                "SUBSTRATE_LLM_AUTH_BUNDLE_FD",
++                Path::new(&auth_fd.as_raw_fd().to_string()),
++            );
++            let _gateway = EnvVarGuard::set("SUBSTRATE_GATEWAY_BINARY", &gateway);
++            let runtime_root = temp.path().join("gateway-runtime");
++            let _runtime_root = EnvVarGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
++            let service = Arc::new(world_service::WorldService::new().unwrap());
++            let owned_pid = Arc::new(AtomicU32::new(0));
++            let _owned = OwnedFakeGateway(owned_pid.clone());
++            let backend = if scope == "world" {
++                "cli:codex-world"
++            } else {
++                "cli:codex-host"
++            };
++            for key in [
++                "OPENAI_FEDERATION_RULE_ID",
++                "OPENAI_IDENTITY_TOKEN_FILE",
++                "OPENAI_WORKLOAD_IDENTITY_CONTEXT",
++            ] {
++                let _workload = EnvVarGuard::set(key, Path::new(""));
++                assert!(public_start_plan_for_test(
++                    &[
++                        "substrate",
++                        "agent",
++                        "start",
++                        "--backend",
++                        backend,
++                        "--scope",
++                        scope,
++                        "--model",
++                        "gpt-6-astra",
++                        "--prompt",
++                        "selected public prompt"
++                    ],
++                    &temp.path().join("unused-backchannel.sock")
++                )
++                .is_err());
++                assert!(!temp.path().join("gateway-config.toml").exists());
++                assert!(!temp.path().join("native-captures.jsonl").exists());
++            }
++            unsafe {
++                assert_eq!(libc::fcntl(auth_fd.as_raw_fd(), libc::F_SETFD, 0), 0);
++            }
++            assert!(public_start_plan_for_test(
++                &[
++                    "substrate",
++                    "agent",
++                    "start",
++                    "--backend",
++                    backend,
++                    "--scope",
++                    scope,
++                    "--model",
++                    "gpt-6-astra",
++                    "--prompt",
++                    "selected public prompt"
++                ],
++                &temp.path().join("unused-backchannel.sock")
++            )
++            .is_err());
++            assert!(!temp.path().join("gateway-config.toml").exists());
++            unsafe {
++                assert_eq!(
++                    libc::fcntl(auth_fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC),
++                    0
++                );
++            }
++            let mut plan = public_start_plan_for_test(
++                &[
++                    "substrate",
++                    "agent",
++                    "start",
++                    "--backend",
++                    backend,
++                    "--scope",
++                    scope,
++                    "--model",
++                    "gpt-6-astra",
++                    "--prompt",
++                    "selected public prompt",
++                ],
++                &temp.path().join("unused-backchannel.sock"),
++            )
++            .unwrap();
++            assert_eq!(plan.descriptor.backend_id, "cli:codex-host");
++            assert_eq!(
++                plan.startup_prompt.as_ref().unwrap().public_scope,
++                Some(if scope == "world" {
++                    AgentExecutionScope::World
++                } else {
++                    AgentExecutionScope::Host
++                })
++            );
++            if scope == "world" {
++                plan.session.world_id = Some("synthetic-world".to_string());
++                plan.session.world_generation = Some(1);
++            }
++            let diagnostics_root = runtime_root.clone();
++            crate::builtins::world_gateway::with_initial_gateway_test_transport(
++                move |request| {
++                    assert_eq!(
++                        request.env.as_ref().unwrap()[transport_api_types::INITIAL_CODEX_MODEL_ENV],
++                        "gpt-6-astra"
++                    );
++                    assert_eq!(
++                        request.integrated_auth.as_ref().unwrap().backend_id,
++                        "cli:codex-host"
++                    );
++                    let request = request.clone();
++                    let service = service.clone();
++                    let pid = owned_pid.clone();
++                    let diagnostics = diagnostics_root.clone();
++                    std::thread::spawn(move || {
++                        let rt = tokio::runtime::Runtime::new().unwrap();
++                        let result = rt.block_on(service.gateway_sync(request.clone()));
++                        if result.is_err() {
++                            if let Ok(entries) = fs::read_dir(diagnostics.join("cli:codex-host")) {
++                                for entry in entries.flatten() {
++                                    for name in ["stdout.log", "stderr.log"] {
++                                        if let Ok(text) =
++                                            fs::read_to_string(entry.path().join(name))
++                                        {
++                                            eprintln!("controlled gateway {name}: {text}");
++                                        }
++                                    }
++                                }
++                            }
++                        }
++                        let response = result?;
++                        pid.store(
++                            service.gateway_runtime_pid_for_test(&request)?.unwrap(),
++                            Ordering::SeqCst,
++                        );
++                        Ok(response)
++                    })
++                    .join()
++                    .unwrap()
++                },
++                || {
++                    prepare_public_start_authority_before_transport(&plan).unwrap();
++                    prepare_public_start_authority_before_transport(&plan).unwrap(); // exact retry joins context without a second gateway sync
++                    let listener = std::os::unix::net::UnixListener::bind(
++                        &plan.startup_prompt.as_ref().unwrap().stream_path,
++                    )
++                    .unwrap();
++                    let messages = std::thread::spawn(move || {
++                        use std::io::Read;
++                        let (mut stream, _) = listener.accept().unwrap();
++                        let mut text = String::new();
++                        stream.read_to_string(&mut text).unwrap();
++                        text
++                    });
++                    let principal =
++                        crate::execution::install_bootstrap::current_unix_principal_and_home()
++                            .unwrap()
++                            .0;
++                    let startup = crate::repl::async_repl::run_hidden_owner_helper(
++                        plan.clone(),
++                        None,
++                        principal,
++                    );
++                    if startup.is_err() {
++                        for name in [
++                            "native-error.txt",
++                            "native-captures.jsonl",
++                            "native-probes.jsonl",
++                        ] {
++                            if let Ok(text) = fs::read_to_string(temp.path().join(name)) {
++                                eprintln!("controlled native {name}: {text}");
++                            }
++                        }
++                    }
++                    assert_eq!(startup.unwrap(), 0);
++                    let messages = messages.join().unwrap();
++                    let envelopes: Vec<serde_json::Value> = messages
++                        .lines()
++                        .map(|line| serde_json::from_str(line).unwrap())
++                        .collect();
++                    let completed = envelopes
++                        .iter()
++                        .find(|event| event["kind"] == "completed")
++                        .expect("public completion envelope");
++                    assert_eq!(completed["session_posture"], "detached_reattachable");
++                    assert_eq!(completed["turn_outcome"], "success");
++                    assert_eq!(
++                        verify_public_start_continuity_settled(plan.orchestration_session_id())
++                            .unwrap(),
++                        HostSessionPostureV1::ParkedResumable
++                    );
++                    let source_context = crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), "cli:codex-host").unwrap().unwrap();
++                    for key in [
++                        "OPENAI_FEDERATION_RULE_ID",
++                        "OPENAI_IDENTITY_TOKEN_FILE",
++                        "OPENAI_WORKLOAD_IDENTITY_CONTEXT",
++                    ] {
++                        let mut unsupported = BTreeMap::from([(key.to_string(), String::new())]);
++                        assert!(source_context.environment(&mut unsupported).is_err());
++                    }
++                    if proof_case == "supported" {
++                        let (principal, _) =
++                            crate::execution::install_bootstrap::current_unix_principal_and_home()
++                                .unwrap();
++                        let transport_api_types::PlatformPrincipalV1::Unix { account, uid } =
++                            principal
++                        else {
++                            panic!("Unix principal");
++                        };
++                        let carrier =
++                            transport_api_types::InstallBootstrapContextCarrierV1::from_context(
++                                transport_api_types::InstallBootstrapContextV1::new_unix(
++                                    home.to_str().unwrap(),
++                                    &account,
++                                    uid,
++                                )
++                                .unwrap(),
++                            )
++                            .unwrap();
++                        crate::execution::install_bootstrap::install_bootstrap_projections(
++                            &carrier,
++                        )
++                        .unwrap();
++                        let public_successor_guard = acquire_public_successor_request_guard(
++                            &home,
++                            plan.orchestration_session_id(),
++                            HostSessionTransitionModeV1::ResumeOneTurn,
++                            &public_start_digest(
++                                "substrate.public-successor-request.v1",
++                                &[
++                                    plan.orchestration_session_id().as_bytes(),
++                                    b"cli:codex-host",
++                                    b"selected public prompt",
++                                ],
++                            ),
++                        )
++                        .unwrap();
++                        let mut successor = build_resumed_turn_launch_plan(
++                            plan.orchestration_session_id(),
++                            "selected public prompt",
++                            Some(&public_successor_guard),
++                        )
++                        .unwrap();
++                        assert_eq!(
++                            successor.applied_transition.mode,
++                            HostSessionTransitionModeV1::ResumeOneTurn
++                        );
++                        let permit =
++                            acquire_authority_managed_successor_launch_permit(&successor).unwrap();
++                        let listener = register_durable_start_startup_prompt_listener(
++                            successor.helper_plan.orchestration_session_id(),
++                            successor.helper_plan.participant_id(),
++                        )
++                        .unwrap();
++                        successor.helper_plan.startup_prompt =
++                            Some(HiddenOwnerHelperStartupPromptPlan {
++                                initial_model: None,
++                                prompt_text: "selected public prompt".to_string(),
++                                stream_path: listener.path().to_path_buf(),
++                                request_key_sha256: None,
++                                prompt_sha256: None,
++                                public_backend_id: None,
++                                public_scope: None,
++                            });
++                        let child_log = temp.path().join("resume-helper.log");
++                        let command_log = child_log.clone();
++                        let receipt = crate::execution::agent_runtime::control::with_successor_test_command(move |plan_path| {
++                            let mut command = std::process::Command::new(std::env::current_exe()?);
++                            command.args(["--ignored", "--exact", "execution::agents_cmd::tests::test_initial_model_successor_helper_child", "--nocapture", "--test-threads=1"])
++                                .env("SUBSTRATE_TASK11_RESUME_PLAN", plan_path)
++                                // This descriptor correctly closes on helper exec. The
++                                // synthetic parent-only handoff label is no child input.
++                                .env("SUBSTRATE_LLM_AUTH_BUNDLE_FD", "")
++                                .stdin(std::process::Stdio::null())
++                                .stdout(std::fs::File::create(&command_log)?)
++                                .stderr(std::fs::OpenOptions::new().append(true).open(&command_log)?);
++                            Ok(command)
++                        }, || launch_authority_managed_successor_owner_helper(&successor, permit, false, false)).unwrap();
++                        struct OwnedHelper(u32);
++                        impl Drop for OwnedHelper {
++                            fn drop(&mut self) {
++                                unsafe {
++                                    libc::kill(self.0 as i32, libc::SIGTERM);
++                                    libc::waitpid(self.0 as i32, std::ptr::null_mut(), 0);
++                                }
++                            }
++                        }
++                        let _helper = OwnedHelper(receipt.launch_receipt.helper_pid);
++                        let streamed = run_hidden_owner_helper_startup_prompt_stream_with_action(
++                            listener,
++                            false,
++                            PublicPromptAction::Turn,
++                        );
++                        let settled = wait_for_authority_managed_successor_completion(&successor);
++                        eprintln!(
++                            "controlled guarded resume helper: {}",
++                            fs::read_to_string(&child_log).unwrap_or_default()
++                        );
++                        streamed.unwrap();
++                        assert!(matches!(
++                            settled.unwrap(),
++                            HostSessionPostureV1::ParkedResumable
++                                | HostSessionPostureV1::AwaitingAttention
++                                | HostSessionPostureV1::DetachedReconciled
++                        ));
++                        assert_eq!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), "cli:codex-host").unwrap().unwrap(), source_context);
++                        eprintln!("selected {scope}: actual guarded resume settled; original context retained");
++                    } else {
++                        let fork =
++                            allocate_fork_successor(plan.orchestration_session_id()).unwrap();
++                        assert_eq!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(&fork.orchestration_session_id, "cli:codex-host").unwrap().unwrap(), source_context);
++                        let before_native =
++                            fs::read(temp.path().join("native-captures.jsonl")).unwrap();
++                        let before_requests =
++                            fs::read(temp.path().join("gateway-requests.jsonl")).unwrap();
++                        let before_config =
++                            fs::read(temp.path().join("gateway-config.toml")).unwrap();
++                        for (identity, expected) in [(fork.orchestration_session_id.as_str(), "current authority has no settled durable Start continuation"), (plan.orchestration_session_id(), "V3 state-root semantics are invalid outside exact authority ancestry")] {
++                            let guard = acquire_public_successor_request_guard(&home, identity, HostSessionTransitionModeV1::ResumeOneTurn,
++                                &public_start_digest("substrate.public-successor-request.v1", &[identity.as_bytes(), b"cli:codex-host", b"selected public prompt"])).unwrap();
++                            let error = match build_resumed_turn_launch_plan(identity, "selected public prompt", Some(&guard)) { Ok(_) => panic!("unsupported continuation unexpectedly applied"), Err(error) => error.to_string() };
++                            assert!(error.contains(expected), "identity={identity} error={error}");
++                            assert_eq!(fs::read(temp.path().join("native-captures.jsonl")).unwrap(), before_native);
++                            assert_eq!(fs::read(temp.path().join("gateway-requests.jsonl")).unwrap(), before_requests);
++                            assert_eq!(fs::read(temp.path().join("gateway-config.toml")).unwrap(), before_config);
++                            eprintln!("selected {scope}: expected refusal identity={identity} error={error}; native and gateway request/config unchanged");
++                        }
++                    }
++                    let descriptor =
++                        RuntimeSelectionDescriptor::try_from(&plan.descriptor).unwrap();
++                    let native_before_refusals =
++                        fs::read(temp.path().join("native-captures.jsonl")).unwrap();
++                    let gateway_before_refusals =
++                        fs::read(temp.path().join("gateway-config.toml")).unwrap();
++                    let context_path = home
++                        .join("run/agent-hub/handles")
++                        .join(plan.orchestration_session_id())
++                        .join("native-launch-context.json");
++                    let original = fs::read(&context_path).unwrap();
++                    fs::write(&context_path, b"{}").unwrap();
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), &descriptor.backend_id).is_err());
++                    fs::write(&context_path, &original).unwrap();
++                    fs::rename(&context_path, context_path.with_extension("saved")).unwrap();
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), &descriptor.backend_id).is_err());
++                    fs::rename(context_path.with_extension("saved"), &context_path).unwrap();
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), "cli:claude_code-host").is_err());
++                    let native_home = context_path.parent().unwrap().join("native-codex-home");
++                    fs::rename(&native_home, native_home.with_extension("saved")).unwrap();
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), &descriptor.backend_id).is_err());
++                    std::os::unix::fs::symlink(native_home.with_extension("saved"), &native_home)
++                        .unwrap();
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), &descriptor.backend_id).is_err());
++                    fs::remove_file(&native_home).unwrap();
++                    fs::rename(native_home.with_extension("saved"), &native_home).unwrap();
++                    assert_eq!(
++                        fs::read(temp.path().join("native-captures.jsonl")).unwrap(),
++                        native_before_refusals
++                    );
++                    assert_eq!(
++                        fs::read(temp.path().join("gateway-config.toml")).unwrap(),
++                        gateway_before_refusals
++                    );
++                },
++            );
++            let config: toml::Value = toml::from_str(
++                &fs::read_to_string(temp.path().join("gateway-config.toml")).unwrap(),
++            )
++            .unwrap();
++            assert_eq!(config["router"]["default"].as_str(), Some("gpt-6-astra"));
++            assert_eq!(
++                config["providers"][0]["models"][0].as_str(),
++                Some("gpt-6-astra")
++            );
++            assert_eq!(
++                config["models"][0]["mappings"][0]["actual_model"].as_str(),
++                Some("gpt-6-astra")
++            );
++            let captures = fs::read_to_string(temp.path().join("native-captures.jsonl")).unwrap();
++            assert_eq!(
++                captures.lines().count(),
++                if proof_case == "supported" { 2 } else { 1 }
++            );
++            assert!(!captures.contains("SYNTHETIC_GATEWAY_SECRET"));
++            assert!(!captures.contains("SYNTHETIC_NATIVE_PARENT_SECRET"));
++            let probes =
++                fs::read_to_string(temp.path().join("native-probes.jsonl")).unwrap_or_default();
++            assert!(!probes.contains("SYNTHETIC_GATEWAY_SECRET"));
++            eprintln!("selected {scope}: native_launches={}, sanitized_probes={}, gateway_allowlist=gpt-6-astra; native captures: {captures}; probe captures: {probes}", captures.lines().count(), probes.lines().count());
++            assert_eq!(
++                std::env::var("SUBSTRATE_AGENT_TOOLBOX_ENDPOINT").unwrap(),
++                "unix:///synthetic-toolbox.sock"
++            );
++            assert_eq!(
++                std::env::var("SUBSTRATE_AGENT_TOOLBOX_VERSION").unwrap(),
++                "1"
++            );
++            assert_eq!(
++                std::env::var("CODEX_ACCESS_TOKEN").unwrap(),
++                "SYNTHETIC_NATIVE_PARENT_SECRET"
++            );
++            assert_eq!(
++                std::env::var("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN").unwrap(),
++                "SYNTHETIC_GATEWAY_SECRET"
++            );
++        }
++    }
++
++    #[cfg(target_os = "linux")]
++    #[test]
++    #[ignore = "controlled successor helper subprocess entrypoint"]
++    fn test_initial_model_successor_helper_child() {
++        let path =
++            std::env::var_os("SUBSTRATE_TASK11_RESUME_PLAN").expect("controlled resume plan");
++        let plan =
++            crate::execution::agent_runtime::control::load_authority_managed_successor_launch_plan(
++                Path::new(&path),
++            )
++            .unwrap();
++        let principal = crate::execution::install_bootstrap::current_unix_principal_and_home()
++            .unwrap()
++            .0;
++        assert_eq!(
++            crate::repl::async_repl::run_hidden_owner_helper(
++                plan.helper_plan.clone(),
++                Some(plan),
++                principal
++            )
++            .unwrap(),
++            0
++        );
++    }
++
++    #[cfg(target_os = "linux")]
++    #[test]
++    #[serial]
++    fn test_initial_model_default_origin_and_refusals_preserve_state() {
++        use std::os::fd::AsRawFd;
++        use std::os::unix::fs::PermissionsExt;
++        use std::sync::atomic::{AtomicU32, Ordering};
++        struct OwnedFakeGateway(Arc<AtomicU32>);
++        impl Drop for OwnedFakeGateway {
++            fn drop(&mut self) {
++                let pid = self.0.load(Ordering::SeqCst);
++                if pid != 0 {
++                    unsafe {
++                        libc::kill(pid as i32, libc::SIGTERM);
++                        libc::waitpid(pid as i32, std::ptr::null_mut(), 0);
++                    }
++                }
++            }
++        }
++        let scope = "host";
++        {
++            let authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
++            let parent = std::env::var_os("XDG_RUNTIME_DIR")
++                .map(PathBuf::from)
++                .unwrap_or_else(|| {
++                    PathBuf::from(
++                        std::env::var_os("HOME").expect("private authority fixture parent"),
++                    )
++                    .join(".cache")
++                });
++            let temp = tempfile::Builder::new()
++                .prefix("s")
++                .rand_bytes(2)
++                .tempdir_in(parent)
++                .unwrap();
++            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700)).unwrap();
++            let home = temp.path().join("h");
++            let workspace = temp.path().join("workspace");
++            fs::create_dir_all(home.join("agents")).unwrap();
++            fs::create_dir_all(&workspace).unwrap();
++            fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
++            fs::set_permissions(home.join("agents"), fs::Permissions::from_mode(0o700)).unwrap();
++            authority_env.install_home(&home);
++            let _cwd = crate::execution::ProcessCwdTestGuard::change_to(&workspace);
++            fs::write(home.join("config.yaml"), "world:\n  enabled: true\nagents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex-host\nllm:\n  enabled: true\n  gateway:\n    enabled: true\n    mode: in_world\n  routing:\n    default_backend: cli:codex-host\n").unwrap();
++            fs::write(home.join("policy.yaml"), "agents:\n  allowed_backends: [cli:codex-host, cli:codex-world]\nllm:\n  allowed_backends: [cli:codex-host, cli:codex-world]\n  secrets:\n    env_allowed: [SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN, SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID]\n").unwrap();
++            let private_native_home = temp.path().join("native-default-home");
++            fs::create_dir(&private_native_home).unwrap();
++            fs::set_permissions(&private_native_home, fs::Permissions::from_mode(0o700)).unwrap();
++            let _private_native_home = EnvVarGuard::set("CODEX_HOME", &private_native_home);
++            let native = temp.path().join("fake-native.py");
++            let gateway = temp.path().join("fake-gateway.py");
++            let root_json = serde_json::to_string(&temp.path().display().to_string()).unwrap();
++            fs::write(&native, r#"#!/usr/bin/python3
++import json,os,sys,traceback
++from pathlib import Path
++root=Path(__ROOT__)
++sys.excepthook=lambda kind,value,tb:(root/'native-error.txt').write_text(''.join(traceback.format_exception(kind,value,tb)))
++a=sys.argv[1:]
++assert os.environ['SUBSTRATE_AGENT_TOOLBOX_ENDPOINT'].startswith('unix://')
++assert os.environ['SUBSTRATE_AGENT_TOOLBOX_VERSION']=='1'
++assert os.environ['CODEX_ACCESS_TOKEN']=='SYNTHETIC_NATIVE_PARENT_SECRET'
++for p in Path('/proc/self/fd').iterdir():
++ try:target=os.readlink(p)
++ except FileNotFoundError:continue
++ assert target!=str(root/'sensitive-auth-fd'),target
++if '--help' in a or '--version' in a or 'features' in a:
++ print('[]' if 'features' in a else 'codex 0.156.1 exec resume --model --json --color --output-last-message --dangerously-bypass-approvals-and-sandbox');raise SystemExit(0)
++assert '--model' not in a
++assert '--config' not in a
++assert '--json' in a and '--dangerously-bypass-approvals-and-sandbox' in a
++assert a[a.index('--color')+1]=='never'
++assert 'resume' not in a
++home=Path(os.environ['CODEX_HOME']); assert home==root/'native-default-home' and home.is_dir()
++with (root/'native-captures.jsonl').open('a') as f:f.write(json.dumps({'argv':a,'home':str(home),'model_arg_absent':True,'selected_config_absent':True})+'\n')
++if '--output-last-message' in a:Path(a[a.index('--output-last-message')+1]).write_text('selected complete')
++_=sys.stdin.read()
++for e in [{'type':'thread.started','thread_id':'selected-native-thread'},{'type':'turn.started','thread_id':'selected-native-thread','turn_id':'turn-1'},{'type':'turn.completed','thread_id':'selected-native-thread','turn_id':'turn-1'}]:print(json.dumps(e),flush=True)
++import signal
++signal.signal(signal.SIGINT,lambda *_:sys.exit(0));signal.signal(signal.SIGTERM,lambda *_:sys.exit(0))
++while True:signal.pause()
++"#.replace("__ROOT__", &root_json)).unwrap();
++            fs::write(&gateway, r#"#!/usr/bin/python3
++import http.server,json,os,re,sys
++from pathlib import Path
++root=Path(__ROOT__)
++config_path=os.environ['SUBSTRATE_LLM_GATEWAY_CONFIG_PATH']
++assert sys.argv[sys.argv.index('--config')+1]==config_path
++config=Path(config_path).read_text()
++(root/'gateway-config.toml').write_text(config)
++with os.fdopen(int(os.environ['SUBSTRATE_LLM_AUTH_BUNDLE_FD']),'rb') as f:bundle=json.loads(f.read())
++assert bundle['fields']['SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN']=='SYNTHETIC_GATEWAY_SECRET'
++assert not os.environ.get('SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN')
++(root/'gateway-bundle.json').write_text(json.dumps(bundle))
++port=int(re.search(r'^port = (\d+)$',config,re.M).group(1))
++class Handler(http.server.BaseHTTPRequestHandler):
++ def do_GET(self):self.send_response(200);self.end_headers();self.wfile.write(b'ok')
++ def log_message(self,*args):pass
++http.server.HTTPServer(('127.0.0.1',port),Handler).serve_forever()
++"#.replace("__ROOT__", &root_json)).unwrap();
++            for path in [&native, &gateway] {
++                fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
++            }
++            for (id, placement) in [("codex-host", "host"), ("codex-world", "world")] {
++                let yaml = format!("version: 1\nid: {id}\nconfig:\n  kind: cli\n  protocol: substrate.agent.session\n  execution:\n    scope: {placement}\n  cli:\n    binary: {}\n    mode: persistent\n    runtime_family: codex\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n", native.display());
++                fs::write(home.join("agents").join(format!("{id}.yaml")), yaml).unwrap();
++            }
++            for path in [
++                home.join("config.yaml"),
++                home.join("policy.yaml"),
++                home.join("agents/codex-host.yaml"),
++                home.join("agents/codex-world.yaml"),
++            ] {
++                fs::set_permissions(path, fs::Permissions::from_mode(0o600)).unwrap();
++            }
++            let _toolbox = EnvVarGuard::set(
++                "SUBSTRATE_AGENT_TOOLBOX_ENDPOINT",
++                Path::new("unix:///synthetic-toolbox.sock"),
++            );
++            let _toolbox_version =
++                EnvVarGuard::set("SUBSTRATE_AGENT_TOOLBOX_VERSION", Path::new("1"));
++            let _auth = EnvVarGuard::set(
++                "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
++                Path::new("SYNTHETIC_GATEWAY_SECRET"),
++            );
++            let _native_auth = EnvVarGuard::set(
++                "CODEX_ACCESS_TOKEN",
++                Path::new("SYNTHETIC_NATIVE_PARENT_SECRET"),
++            );
++            let _account = EnvVarGuard::set(
++                "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
++                Path::new("synthetic-account"),
++            );
++            let auth_fd_path = temp.path().join("sensitive-auth-fd");
++            fs::write(&auth_fd_path, b"SYNTHETIC_GATEWAY_SECRET").unwrap();
++            let auth_fd = std::fs::File::open(&auth_fd_path).unwrap();
++            let _auth_fd = EnvVarGuard::set(
++                "SUBSTRATE_LLM_AUTH_BUNDLE_FD",
++                Path::new(&auth_fd.as_raw_fd().to_string()),
++            );
++            let _gateway = EnvVarGuard::set("SUBSTRATE_GATEWAY_BINARY", &gateway);
++            let runtime_root = temp.path().join("gateway-runtime");
++            let _runtime_root = EnvVarGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
++            let service = Arc::new(world_service::WorldService::new().unwrap());
++            let owned_pid = Arc::new(AtomicU32::new(0));
++            let _owned = OwnedFakeGateway(owned_pid.clone());
++            let backend = if scope == "world" {
++                "cli:codex-world"
++            } else {
++                "cli:codex-host"
++            };
++            let mut plan = public_start_plan_for_test(
++                &[
++                    "substrate",
++                    "agent",
++                    "start",
++                    "--backend",
++                    backend,
++                    "--scope",
++                    scope,
++                    "--prompt",
++                    "selected public prompt",
++                ],
++                &temp.path().join("unused-backchannel.sock"),
++            )
++            .unwrap();
++            let startup_metadata = plan.startup_prompt.as_ref().unwrap();
++            assert!(startup_metadata.initial_model.is_none());
++            assert!(serde_json::to_value(startup_metadata)
++                .unwrap()
++                .get("initial_model")
++                .is_none());
++            let legacy_preimage = serde_json::json!({
++                "schema_version":1,"descriptor":&plan.descriptor,
++                "workspace_root":&plan.session.workspace_root,"host_attach_contract":&plan.host_attach_contract,
++                "public_backend_id":"cli:codex-host","public_scope":"host",
++                "prompt_sha256":startup_metadata.prompt_sha256.as_deref().unwrap(),
++            });
++            assert!(legacy_preimage.get("initial_model").is_none());
++            assert_eq!(
++                startup_metadata.request_key_sha256.as_deref(),
++                Some(
++                    public_start_digest(
++                        "substrate.a1.3-p1.public-start-request.v1",
++                        &[&serde_json::to_vec(&legacy_preimage).unwrap()]
++                    )
++                    .as_str()
++                )
++            );
++            eprintln!("omitted differential model_flag_absent=true metadata_initial_model_absent=true legacy_request_preimage_match=true");
++            assert_eq!(plan.descriptor.backend_id, "cli:codex-host");
++            assert_eq!(
++                plan.startup_prompt.as_ref().unwrap().public_scope,
++                Some(if scope == "world" {
++                    AgentExecutionScope::World
++                } else {
++                    AgentExecutionScope::Host
++                })
++            );
++            if scope == "world" {
++                plan.session.world_id = Some("synthetic-world".to_string());
++                plan.session.world_generation = Some(1);
++            }
++            let diagnostics_root = runtime_root.clone();
++            crate::builtins::world_gateway::with_initial_gateway_test_transport(
++                move |request| {
++                    assert!(request
++                        .env
++                        .as_ref()
++                        .and_then(|env| env.get(transport_api_types::INITIAL_CODEX_MODEL_ENV))
++                        .is_none());
++                    assert_eq!(
++                        request.integrated_auth.as_ref().unwrap().backend_id,
++                        "cli:codex-host"
++                    );
++                    let request = request.clone();
++                    let service = service.clone();
++                    let pid = owned_pid.clone();
++                    let diagnostics = diagnostics_root.clone();
++                    std::thread::spawn(move || {
++                        let rt = tokio::runtime::Runtime::new().unwrap();
++                        let result = rt.block_on(service.gateway_sync(request.clone()));
++                        if result.is_err() {
++                            if let Ok(entries) = fs::read_dir(diagnostics.join("cli:codex-host")) {
++                                for entry in entries.flatten() {
++                                    for name in ["stdout.log", "stderr.log"] {
++                                        if let Ok(text) =
++                                            fs::read_to_string(entry.path().join(name))
++                                        {
++                                            eprintln!("controlled gateway {name}: {text}");
++                                        }
++                                    }
++                                }
++                            }
++                        }
++                        let response = result?;
++                        pid.store(
++                            service.gateway_runtime_pid_for_test(&request)?.unwrap(),
++                            Ordering::SeqCst,
++                        );
++                        Ok(response)
++                    })
++                    .join()
++                    .unwrap()
++                },
++                || {
++                    prepare_public_start_authority_before_transport(&plan).unwrap();
++                    prepare_public_start_authority_before_transport(&plan).unwrap(); // exact retry joins context without a second gateway sync
++                    let listener = std::os::unix::net::UnixListener::bind(
++                        &plan.startup_prompt.as_ref().unwrap().stream_path,
++                    )
++                    .unwrap();
++                    let messages = std::thread::spawn(move || {
++                        use std::io::Read;
++                        let (mut stream, _) = listener.accept().unwrap();
++                        let mut text = String::new();
++                        stream.read_to_string(&mut text).unwrap();
++                        text
++                    });
++                    let principal =
++                        crate::execution::install_bootstrap::current_unix_principal_and_home()
++                            .unwrap()
++                            .0;
++                    let startup = crate::repl::async_repl::run_hidden_owner_helper(
++                        plan.clone(),
++                        None,
++                        principal,
++                    );
++                    if startup.is_err() {
++                        for name in [
++                            "native-error.txt",
++                            "native-captures.jsonl",
++                            "native-probes.jsonl",
++                        ] {
++                            if let Ok(text) = fs::read_to_string(temp.path().join(name)) {
++                                eprintln!("controlled native {name}: {text}");
++                            }
++                        }
++                    }
++                    assert_eq!(startup.unwrap(), 0);
++                    let messages = messages.join().unwrap();
++                    let envelopes: Vec<serde_json::Value> = messages
++                        .lines()
++                        .map(|line| serde_json::from_str(line).unwrap())
++                        .collect();
++                    let completed = envelopes
++                        .iter()
++                        .find(|event| event["kind"] == "completed")
++                        .expect("public completion envelope");
++                    assert_eq!(completed["session_posture"], "detached_reattachable");
++                    assert_eq!(completed["turn_outcome"], "success");
++                    assert_eq!(
++                        verify_public_start_continuity_settled(plan.orchestration_session_id())
++                            .unwrap(),
++                        HostSessionPostureV1::ParkedResumable
++                    );
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(plan.orchestration_session_id(), "cli:codex-host").unwrap().is_none());
++                    assert!(!home
++                        .join("run/agent-hub/handles")
++                        .join(plan.orchestration_session_id())
++                        .join("native-launch-context.json")
++                        .exists());
++                    let captures =
++                        fs::read_to_string(temp.path().join("native-captures.jsonl")).unwrap();
++                    assert_eq!(captures.lines().count(), 1);
++                    eprintln!("omitted differential stage=StartParked captures={captures}");
++                    let authority = public_start_authority().unwrap();
++                    let resolved = authority
++                        .resolve_current_exact(plan.orchestration_session_id(), None)
++                        .unwrap();
++                    let recognized_temp = home
++                        .join("authority-v1/tmp/root--r2--33333333333333333333333333333333.tmp");
++                    fs::write(&recognized_temp, b"synthetic interrupted default artifact").unwrap();
++                    fs::set_permissions(&recognized_temp, fs::Permissions::from_mode(0o600))
++                        .unwrap();
++                    let root_before =
++                        fs::read(home.join("authority-v1/state-root-v1.json")).unwrap();
++                    let descriptor =
++                        RuntimeSelectionDescriptor::try_from(&plan.descriptor).unwrap();
++                    let _bridge = crate::execution::prompt_fulfillment::PromptFulfillmentBridge::for_descriptor(&descriptor).unwrap().with_authenticated_context(&resolved, &descriptor.backend_id).unwrap();
++                    assert_eq!(
++                        fs::read(&recognized_temp).unwrap(),
++                        b"synthetic interrupted default artifact"
++                    );
++                    assert_eq!(
++                        fs::read(home.join("authority-v1/state-root-v1.json")).unwrap(),
++                        root_before
++                    );
++                    authority
++                        .resolve_current_exact(plan.orchestration_session_id(), None)
++                        .unwrap();
++                    assert!(
++                        !recognized_temp.exists(),
++                        "existing authority lookup must reconcile recognized temp"
++                    );
++                    eprintln!("default binding added no read/reconciliation; existing later authority lookup reconciled exact safe temp");
++                    let fork = allocate_fork_successor(plan.orchestration_session_id()).unwrap();
++                    assert!(crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_session(&fork.orchestration_session_id, "cli:codex-host").unwrap().is_none());
++                    eprintln!(
++                        "omitted differential stage=AuthenticatedForkAllocated context_absent=true"
++                    );
++                    let public_successor_guard = acquire_public_successor_request_guard(
++                        &home,
++                        plan.orchestration_session_id(),
++                        HostSessionTransitionModeV1::ResumeOneTurn,
++                        &public_start_digest(
++                            "substrate.public-successor-request.v1",
++                            &[
++                                plan.orchestration_session_id().as_bytes(),
++                                b"cli:codex-host",
++                                b"selected public prompt",
++                            ],
++                        ),
++                    )
++                    .unwrap();
++                    let successor = build_resumed_turn_launch_plan(
++                        plan.orchestration_session_id(),
++                        "selected public prompt",
++                        Some(&public_successor_guard),
++                    );
++                    if successor.is_err() {
++                        let raw = fs::read(home.join("authority-v1/state-root-v1.json")).unwrap();
++                        let root: crate::execution::agent_runtime::host_session_authority::store_schema::StateRootV3 = serde_json::from_slice(&raw).unwrap();
++                        eprintln!(
++                            "omitted successor fixture schema diagnostic: {:?}",
++                            root.validate()
++                        );
++                    }
++                    let error = match successor {
++                        Ok(_) => {
++                            panic!("unsupported original-session ordering unexpectedly applied")
++                        }
++                        Err(error) => error.to_string(),
++                    };
++                    assert!(
++                        error.contains(
++                            "V3 state-root semantics are invalid outside exact authority ancestry"
++                        ),
++                        "{error}"
++                    );
++                    assert_eq!(
++                        fs::read_to_string(temp.path().join("native-captures.jsonl")).unwrap(),
++                        captures
++                    );
++                    assert!(!temp.path().join("gateway-config.toml").exists());
++                    eprintln!("default expected refusal {error}; no additional native launch or selected gateway traffic");
++                },
++            );
++            assert!(!temp.path().join("gateway-config.toml").exists());
++        }
++    }
++
+     fn host_start_args() -> AgentStartArgs {
+         AgentStartArgs {
++            model: None,
+             backend: "cli:codex-host".to_string(),
+             scope: Some(AgentStartScopeArg::Host),
+             disable_capability: vec![AgentDisableCapabilityArg::SessionFork],
+@@ -6565,6 +7765,7 @@ mod tests {
+ 
+     fn world_start_args() -> AgentStartArgs {
+         AgentStartArgs {
++            model: None,
+             backend: "cli:claude_code-world".to_string(),
+             scope: Some(AgentStartScopeArg::World),
+             disable_capability: vec![AgentDisableCapabilityArg::SessionStop],
+@@ -7591,6 +8792,7 @@ mod tests {
+ 
+     fn omitted_scope_start_args(backend_id: &str) -> AgentStartArgs {
+         AgentStartArgs {
++            model: None,
+             backend: backend_id.to_string(),
+             scope: None,
+             disable_capability: Vec::new(),
+diff --git a/crates/shell/src/execution/cli.rs b/crates/shell/src/execution/cli.rs
+index 4265303911dd0cf61e7fa6d73ac9d3483713bcaf..98081c221482774c58f4470b6aec9d7bcf1a85fe 100644
+--- a/crates/shell/src/execution/cli.rs
++++ b/crates/shell/src/execution/cli.rs
+@@ -532,6 +532,9 @@ pub struct AgentOwnerHelperArgs {
+ 
+ #[derive(Args, Debug, Default)]
+ pub struct AgentStartArgs {
++    /// Immutable initial Codex model; omission retains the existing gateway route.
++    #[arg(long, value_name = "MODEL")]
++    pub model: Option<transport_api_types::InitialCodexModel>,
+     #[arg(long = "backend", value_name = "BACKEND_ID")]
+     pub backend: String,
+     #[arg(long, value_name = "host|world")]
+@@ -670,6 +673,61 @@ mod tests {
+         start
+     }
+ 
++    #[test]
++    fn test_initial_model_public_parser_is_exact_and_start_only() {
++        let args = parse_start_args(&[
++            "substrate",
++            "agent",
++            "start",
++            "--backend",
++            "cli:codex-host",
++            "--model",
++            "gpt-6-astra",
++            "--prompt",
++            "hello",
++        ]);
++        assert_eq!(args.model.unwrap().as_str(), "gpt-6-astra");
++        assert!(parse_start_args(&[
++            "substrate",
++            "agent",
++            "start",
++            "--backend",
++            "cli:codex-host",
++            "--prompt",
++            "hello"
++        ])
++        .model
++        .is_none());
++        for model in ["", "astra", "Gpt-6-astra", "gpt-6-astra ", "codex"] {
++            assert!(Cli::try_parse_from([
++                "substrate",
++                "agent",
++                "start",
++                "--backend",
++                "cli:codex-host",
++                "--model",
++                model,
++                "--prompt",
++                "hello"
++            ])
++            .is_err());
++        }
++        assert!(Cli::try_parse_from([
++            "substrate",
++            "agent",
++            "turn",
++            "--session",
++            "s",
++            "--backend",
++            "cli:codex-host",
++            "--model",
++            "gpt-6-astra",
++            "--prompt",
++            "hello"
++        ])
++        .is_err());
++    }
++
+     #[test]
+     fn agent_start_leaves_scope_unset_when_omitted() {
+         let start = parse_start_args(&[
+diff --git a/crates/shell/src/execution/prompt_fulfillment.rs b/crates/shell/src/execution/prompt_fulfillment.rs
+index f147ac1f77793a4a3a53bff16c48d19be198e95f..e63f0840df2137df356fe280b74e232a4d828e67 100644
+--- a/crates/shell/src/execution/prompt_fulfillment.rs
++++ b/crates/shell/src/execution/prompt_fulfillment.rs
+@@ -118,6 +118,9 @@ pub(crate) struct PromptFulfillmentBridge {
+     runtime: GatewayAdapterRuntime,
+     backend_kind: AgentRuntimeBackendKind,
+     binary_path: PathBuf,
++    native_context: Option<
++        crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext,
++    >,
+ }
+ 
+ impl PromptFulfillmentBridge {
+@@ -133,13 +136,41 @@ impl PromptFulfillmentBridge {
+             )?,
+             backend_kind: descriptor.backend_kind,
+             binary_path: descriptor.binary_path.clone(),
++            native_context: None,
+         })
+     }
+ 
++    pub(crate) fn with_authenticated_context(
++        mut self,
++        current: &crate::execution::agent_runtime::host_session_authority::ResolvedCurrentAuthorityV1,
++        backend: &str,
++    ) -> anyhow::Result<Self> {
++        self.native_context = crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::for_resolved(current, backend)?;
++        if self.native_context.is_some() && self.backend_kind != AgentRuntimeBackendKind::Codex {
++            anyhow::bail!("selected native context requires Codex backend");
++        }
++        Ok(self)
++    }
++
+     pub(crate) async fn run_control(
+         &self,
+         request: AgentWrapperRunRequest,
+     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
++        if self.native_context.is_some() {
++            let id = request
++                .extensions
++                .get(AGENT_API_SESSION_RESUME_V1)
++                .and_then(|value| value.get("id"))
++                .and_then(|value| value.as_str())
++                .ok_or_else(|| AgentWrapperError::InvalidRequest {
++                    message: "selected native continuation requires exact existing session"
++                        .to_string(),
++                })?
++                .to_string();
++            return self
++                .run_authority_managed_resume_one_turn_control(&id, request)
++                .await;
++        }
+         let cancel_requested = Arc::new(AtomicBool::new(false));
+         let control = self.runtime.run_control(request).await?;
+         Ok(PromptFulfillmentRunControl {
+@@ -187,7 +218,7 @@ impl PromptFulfillmentBridge {
+ 
+     async fn run_codex_durable_start(
+         &self,
+-        request: AgentWrapperRunRequest,
++        mut request: AgentWrapperRunRequest,
+     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+         if !request.extensions.is_empty() {
+             return Err(AgentWrapperError::InvalidRequest {
+@@ -205,6 +236,18 @@ impl PromptFulfillmentBridge {
+         if let Some(working_dir) = request.working_dir {
+             builder = builder.working_dir(working_dir);
+         }
++        if let Some(context) = &self.native_context {
++            builder = context.configure(builder, true).map_err(|_| {
++                AgentWrapperError::InvalidRequest {
++                    message: "selected native configuration rejected".to_string(),
++                }
++            })?;
++            context.environment(&mut request.env).map_err(|_| {
++                AgentWrapperError::InvalidRequest {
++                    message: "selected native environment rejected".to_string(),
++                }
++            })?;
++        }
+         let control = builder
+             .build()
+             .stream_exec_with_env_overrides_control(
+@@ -254,7 +297,7 @@ impl PromptFulfillmentBridge {
+     async fn run_codex_authority_managed_resume(
+         &self,
+         expected_session_id: &str,
+-        request: AgentWrapperRunRequest,
++        mut request: AgentWrapperRunRequest,
+     ) -> Result<PromptFulfillmentRunControl, AgentWrapperError> {
+         let mut builder = codex::CodexClient::builder()
+             .binary(self.binary_path.clone())
+@@ -267,6 +310,18 @@ impl PromptFulfillmentBridge {
+         if let Some(working_dir) = request.working_dir {
+             builder = builder.working_dir(working_dir);
+         }
++        if let Some(context) = &self.native_context {
++            builder = context.configure(builder, false).map_err(|_| {
++                AgentWrapperError::InvalidRequest {
++                    message: "selected native configuration rejected".to_string(),
++                }
++            })?;
++            context.environment(&mut request.env).map_err(|_| {
++                AgentWrapperError::InvalidRequest {
++                    message: "selected native environment rejected".to_string(),
++                }
++            })?;
++        }
+         let control = builder
+             .build()
+             .stream_resume_with_env_overrides_control(
+diff --git a/crates/shell/src/repl/async_repl.rs b/crates/shell/src/repl/async_repl.rs
+index 1cc564e40dd61c326ef43f27f94a1f2d0cafcb68..3ddb06244649986b848345c36aca946761ef5317 100644
+--- a/crates/shell/src/repl/async_repl.rs
++++ b/crates/shell/src/repl/async_repl.rs
+@@ -3866,7 +3866,16 @@ fn apply_greenfield_host_start_from_authority(
+         world_id: binding.world_id.clone(),
+         world_generation: binding.world_generation,
+     });
+-    let seed_plan = serde_json::json!({
++    let initial_model = public_start_plan
++        .and_then(|plan| plan.startup_prompt.as_ref())
++        .and_then(|prompt| prompt.initial_model);
++    if initial_model.is_some() && descriptor.backend_kind != AgentRuntimeBackendKind::Codex {
++        return Err(RuntimeBootstrapFailure {
++            exit_code: 2,
++            message: "selected initial model requires actual Codex backend".to_string(),
++        });
++    }
++    let mut seed_plan = serde_json::json!({
+         "schema_version": 1,
+         "operation": "greenfield-host-start",
+         "workspace_binding": &workspace_binding,
+@@ -3883,6 +3892,9 @@ fn apply_greenfield_host_start_from_authority(
+             "run_id": plan.participant.run_id,
+         })),
+     });
++    if let Some(model) = initial_model {
++        seed_plan["initial_model"] = serde_json::json!(model);
++    }
+     let seed_bytes = canonical_json::to_vec(&seed_plan).map_err(|err| RuntimeBootstrapFailure {
+         exit_code: 1,
+         message: format!("failed to canonicalize greenfield Start seed plan: {err}"),
+@@ -3934,7 +3946,19 @@ fn apply_greenfield_host_start_from_authority(
+         run_id = plan.participant.run_id.clone();
+         lease_token = plan.participant.lease_token.clone();
+     }
+-    let complete_plan = serde_json::json!({
++    #[cfg(target_os = "linux")]
++    let native_context_digest = initial_model.map(|model| {
++        crate::execution::agent_runtime::control::native_launch_context::NativeLaunchContext::stage(
++            &authority, &orchestration_session_id, &descriptor.backend_id, model, || {
++                crate::builtins::world_gateway::prepare_initial_codex_gateway(
++                    Path::new(&authority.bootstrap_home().identity()?.physical_path),
++                    Path::new(&workspace_binding.workspace_root.physical_path), &descriptor.backend_id, model)
++            },
++        ).map(|(_, digest)| digest).map_err(runtime_bootstrap_failure_from_anyhow)
++    }).transpose()?;
++    #[cfg(not(target_os = "linux"))]
++    let native_context_digest: Option<String> = None;
++    let mut complete_plan = serde_json::json!({
+         "schema_version": 1,
+         "operation": "greenfield-host-start",
+         "intent_id": &intent_id,
+@@ -3953,6 +3977,9 @@ fn apply_greenfield_host_start_from_authority(
+         "claim_id": &claim_id,
+         "claimant_attempt_id": &claimant_attempt_id,
+     });
++    if let Some(digest) = &native_context_digest {
++        complete_plan["native_context_sha256"] = serde_json::json!(digest);
++    }
+     let complete_plan_bytes =
+         canonical_json::to_vec(&complete_plan).map_err(|err| RuntimeBootstrapFailure {
+             exit_code: 1,
+@@ -3965,6 +3992,18 @@ fn apply_greenfield_host_start_from_authority(
+             &complete_plan_bytes
+         )
+     );
++    let issuer_request_id = match native_context_digest {
++        Some(context_digest) => {
++            crate::execution::agent_runtime::control::native_launch_context::selected_issuer(
++                &context_digest,
++                &digest(
++                    "substrate.a1.2a-s.start-issuer-request.v1",
++                    &complete_plan_bytes,
++                ),
++            )
++        }
++        None => issuer_request_id,
++    };
+     let request = IssueHostSessionTransitionRequestV1 {
+         intent_id,
+         issuer_request_id: issuer_request_id.clone(),
+@@ -7072,6 +7111,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt_and_toolbox_reques
+                 startup_toolbox_transport = Some(transport);
+             }
+         }
++        let prompt_fulfillment =
++            if let RuntimeAuthorityContext::Bound(current) = &startup_context.authority {
++                prompt_fulfillment
++                    .with_authenticated_context(current, &descriptor.backend_id)
++                    .map_err(runtime_bootstrap_failure_from_anyhow)?
++            } else {
++                prompt_fulfillment
++            };
+         let request = agent_api::AgentWrapperRunRequest {
+             prompt: match initial_prompt.as_ref() {
+                 Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
+@@ -21266,12 +21313,16 @@ mod tests {
+     #[test]
+     #[serial_test::serial]
+     fn shutdown_host_orchestrator_runtime_waits_for_cancel_completion_before_stopping() {
++        use std::os::unix::fs::PermissionsExt;
++
+         let _authority_env = crate::execution::AuthorityEnvTestGuard::preserve();
+         let temp = private_authority_test_tempdir();
+         let workspace_root = temp.path().join("workspace");
+         let substrate_home = temp.path().join("h");
+         fs::create_dir_all(&workspace_root).expect("workspace root");
+         fs::create_dir_all(&substrate_home).expect("substrate home");
++        fs::set_permissions(&substrate_home, fs::Permissions::from_mode(0o700))
++            .expect("secure fixture home");
+         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+         let fake_codex = write_fake_codex_script_with_shutdown_delay(&temp, 1);
+ 
+@@ -21288,12 +21339,23 @@ mod tests {
+         .expect("write policy");
+         let agents_dir = substrate_home.join("agents");
+         fs::create_dir_all(&agents_dir).expect("agents dir");
++        fs::set_permissions(&agents_dir, fs::Permissions::from_mode(0o700))
++            .expect("secure fixture inventory directory");
+         fs::write(
+             agents_dir.join("codex-host.yaml"),
+             runtime_agent_file("codex-host", "host", "codex", &fake_codex),
+         )
+         .expect("write codex agent file");
+ 
++        for path in [
++            substrate_home.join("config.yaml"),
++            substrate_home.join("policy.yaml"),
++            agents_dir.join("codex-host.yaml"),
++        ] {
++            fs::set_permissions(path, fs::Permissions::from_mode(0o600))
++                .expect("secure fixture input");
++        }
++
+         let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+         rt.block_on(async {
+@@ -23371,6 +23433,7 @@ mod tests {
+                 },
+                 host_attach_contract: None,
+                 startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
++                    initial_model: None,
+                     prompt_text: caller_prompt.to_string(),
+                     stream_path: stream_path.clone(),
+                     request_key_sha256: Some("c".repeat(64)),
+@@ -23598,6 +23661,7 @@ mod tests {
+                 },
+                 host_attach_contract: None,
+                 startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
++                    initial_model: None,
+                     prompt_text: caller_prompt.to_string(),
+                     stream_path: stream_path.clone(),
+                     request_key_sha256: Some("e".repeat(64)),
+@@ -24813,6 +24877,7 @@ mod tests {
+                 },
+                 host_attach_contract: None,
+                 startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
++                    initial_model: None,
+                     prompt_text: caller_prompt.to_string(),
+                     stream_path: startup_stream_path.clone(),
+                     request_key_sha256: Some("a".repeat(64)),
+diff --git a/crates/transport-api-types/src/lib.rs b/crates/transport-api-types/src/lib.rs
+index 3ceda0a6a0c105e5d69da883645059608eae93b3..a88aeea32de3fa560457f63169e150d693f7533a 100644
+--- a/crates/transport-api-types/src/lib.rs
++++ b/crates/transport-api-types/src/lib.rs
+@@ -21,6 +21,38 @@ pub use world_api::{
+     SharedWorldOwnerSpec, WorldReuseMode,
+ };
+ 
++/// Explicit initial Codex selection carried only by a lifecycle request.
++pub const INITIAL_CODEX_MODEL_ENV: &str = "SUBSTRATE_INITIAL_CODEX_MODEL";
++
++/// Supported immutable initial Codex model. Omission retains the existing route.
++///
++/// ```
++/// use transport_api_types::InitialCodexModel;
++/// assert_eq!("gpt-6-astra".parse::<InitialCodexModel>().unwrap().as_str(), "gpt-6-astra");
++/// assert!("codex".parse::<InitialCodexModel>().is_err());
++/// ```
++#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
++pub enum InitialCodexModel {
++    #[serde(rename = "gpt-6-astra")]
++    Gpt6Astra,
++}
++
++impl InitialCodexModel {
++    pub const fn as_str(self) -> &'static str {
++        "gpt-6-astra"
++    }
++}
++
++impl std::str::FromStr for InitialCodexModel {
++    type Err = String;
++    fn from_str(value: &str) -> Result<Self, Self::Err> {
++        match value {
++            "gpt-6-astra" => Ok(Self::Gpt6Astra),
++            _ => Err("unsupported initial model; expected exact gpt-6-astra".to_string()),
++        }
++    }
++}
++
+ const INSTALL_BOOTSTRAP_CONTEXT_DOMAIN_V1: &str = "substrate.install_bootstrap_context";
+ const PLATFORM_BOOTSTRAP_MAPPING_DOMAIN_V1: &str = "substrate.platform_bootstrap_mapping";
+ const WINDOWS_FORWARDER_SCOPE_DOMAIN_V1: &str = "substrate.windows_forwarder_scope";
+diff --git a/crates/world-service/src/gateway_runtime.rs b/crates/world-service/src/gateway_runtime.rs
+index 5094d987443f1a77a151702cbddaac4609e141bf..09c16767a28c5f8ff705744630c5e2b74a28c4f9 100644
+--- a/crates/world-service/src/gateway_runtime.rs
++++ b/crates/world-service/src/gateway_runtime.rs
+@@ -6603,6 +6603,7 @@ pub(crate) enum GatewayRuntimeState {
+ #[derive(Debug, Clone)]
+ pub(crate) struct GatewayControlSettings {
+     pub default_backend: String,
++    pub initial_model: Option<transport_api_types::InitialCodexModel>,
+ }
+ 
+ impl GatewayControlSettings {
+@@ -6653,7 +6654,16 @@ impl GatewayControlSettings {
+             }
+         })?;
+ 
+-        Ok(Self { default_backend })
++        let initial_model = env
++            .and_then(|values| values.get(transport_api_types::INITIAL_CODEX_MODEL_ENV))
++            .map(|value| value.parse::<transport_api_types::InitialCodexModel>())
++            .transpose()
++            .map_err(GatewayRuntimeFailure::invalid_integration)?;
++        resolve_initial_gateway_binding(&default_backend, initial_model)?;
++        Ok(Self {
++            default_backend,
++            initial_model,
++        })
+     }
+ }
+ 
+@@ -6786,6 +6796,40 @@ pub(crate) fn resolve_gateway_backend_binding(
+         .find(|binding| binding.backend_id == backend_id)
+ }
+ 
++/// Selection changes both the native route and the provider allowlist.
++pub(crate) fn resolve_initial_gateway_binding(
++    backend_id: &str,
++    model: Option<transport_api_types::InitialCodexModel>,
++) -> Result<Option<&'static GatewayBackendBinding>, GatewayRuntimeFailure> {
++    const SELECTED: &[GatewayBackendBinding] = &[
++        GatewayBackendBinding {
++            routed_model: "gpt-6-astra",
++            actual_model: "gpt-6-astra",
++            ..CLI_CODEX_BACKEND_BINDING
++        },
++        GatewayBackendBinding {
++            routed_model: "gpt-6-astra",
++            actual_model: "gpt-6-astra",
++            ..CLI_CODEX_HOST_BACKEND_BINDING
++        },
++        GatewayBackendBinding {
++            routed_model: "gpt-6-astra",
++            actual_model: "gpt-6-astra",
++            ..CLI_CODEX_WORLD_BACKEND_BINDING
++        },
++    ];
++    if model.is_none() {
++        return Ok(resolve_gateway_backend_binding(backend_id));
++    }
++    SELECTED
++        .iter()
++        .find(|binding| binding.backend_id == backend_id)
++        .map(Some)
++        .ok_or_else(|| {
++            GatewayRuntimeFailure::invalid_integration("initial model requires a Codex backend")
++        })
++}
++
+ #[derive(Debug, thiserror::Error)]
+ pub(crate) enum GatewayRuntimeFailure {
+     #[error("gateway_invalid_integration: {0}")]
+@@ -6869,6 +6913,9 @@ enum ManagedGatewayProcess {
+ 
+ #[derive(Debug, Clone)]
+ struct ManagedGatewayRuntime {
++    // Only the manager that spawned this process knows its birth selection.
++    // Recovered manifests and mutable config files cannot establish it.
++    birth_model: Option<&'static str>,
+     world_id: String,
+     backend_id: String,
+     port: u16,
+@@ -7110,6 +7157,7 @@ impl GatewayRuntimeManager {
+         ready_timeout: Duration,
+         lifecycle: Option<&Arc<GatewayLifecycleWorldState>>,
+     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
++        self.validate_initial_model_reuse(&ctx)?;
+         if let Some(runtime) =
+             self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)?
+         {
+@@ -7156,6 +7204,7 @@ impl GatewayRuntimeManager {
+     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+         let lifecycle = self.lifecycle_for_world(&ctx.world_id);
+         let _world_guard = lifecycle.op_lock.lock().await;
++        self.validate_initial_model_reuse(&ctx)?;
+         let _restart_state = lifecycle.scoped_state(GatewayRuntimeState::RestartInProgress);
+ 
+         if let Some(existing) =
+@@ -7211,6 +7260,38 @@ impl GatewayRuntimeManager {
+             .and_then(|state| state.state())
+     }
+ 
++    fn validate_initial_model_reuse(
++        &self,
++        ctx: &GatewayRuntimeStartContext,
++    ) -> Result<(), GatewayRuntimeFailure> {
++        if let Some(runtime) = self.runtime_for_world(&ctx.world_id) {
++            // Inspect the existing birth BEFORE classifying the requested backend.
++            // A selected Codex runtime must never be returned as an omitted API/Claude runtime.
++            if runtime.birth_model == Some("gpt-6-astra")
++                || ctx.binding.routed_model == "gpt-6-astra"
++                || (matches!(ctx.binding.auth_kind, GatewayIntegratedAuthKind::CliCodex)
++                    && (runtime.birth_model != Some(DEFAULT_ROUTED_MODEL)
++                        || runtime.backend_id != ctx.binding.backend_id))
++            {
++                return Err(GatewayRuntimeFailure::invalid_integration("gateway model reuse is unproved or conflicts with its birth selection; existing runtime preserved"));
++            }
++        } else {
++            // A recovered Codex runtime may have been selected regardless of the
++            // newly requested backend. Never observe/recover/delete it to guess.
++            for backend in [
++                DEFAULT_BACKEND,
++                CLI_CODEX_HOST_BACKEND,
++                CLI_CODEX_WORLD_BACKEND,
++            ] {
++                match fs::symlink_metadata(manifest_path_for_world(&ctx.world_id, backend)) {
++                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
++                    _ => return Err(GatewayRuntimeFailure::invalid_integration("recovered gateway model provenance is unavailable; existing manifest preserved")),
++                }
++            }
++        }
++        Ok(())
++    }
++
+     fn runtime_for_world_or_manifest(
+         &self,
+         world_id: &str,
+@@ -7278,6 +7359,7 @@ impl GatewayRuntimeManager {
+         }
+ 
+         let runtime = ManagedGatewayRuntime {
++            birth_model: None,
+             world_id: manifest.world_id,
+             backend_id: manifest.backend_id,
+             port: manifest.port,
+@@ -7473,6 +7555,7 @@ fn start_runtime(
+ 
+     let world_id = ctx.world_id;
+     let runtime = ManagedGatewayRuntime {
++        birth_model: Some(ctx.binding.routed_model),
+         world_id: world_id.clone(),
+         backend_id: ctx.binding.backend_id.to_string(),
+         port,
+@@ -10888,6 +10971,213 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
+         assert!(resolve_gateway_backend_binding("api:anthropic").is_none());
+     }
+ 
++    #[tokio::test]
++    async fn test_initial_model_reuse_refuses_before_ready_starting_restart_or_recovery_mutation() {
++        let _env_lock = ENV_LOCK.lock().await;
++        let temp = TempDir::new().unwrap();
++        let _runtime_root = EnvGuard::set(
++            "SUBSTRATE_GATEWAY_RUNTIME_ROOT",
++            temp.path().join("runtime"),
++        );
++        let selected = resolve_initial_gateway_binding(
++            DEFAULT_BACKEND,
++            Some(transport_api_types::InitialCodexModel::Gpt6Astra),
++        )
++        .unwrap()
++        .unwrap();
++        let default = resolve_gateway_backend_binding(DEFAULT_BACKEND).unwrap();
++        let claude = resolve_gateway_backend_binding(CLI_CLAUDE_CODE_HOST_BACKEND).unwrap();
++        let api = resolve_gateway_backend_binding(API_OPENAI_BACKEND).unwrap();
++        for state in [
++            GatewayRuntimeState::Ready,
++            GatewayRuntimeState::Starting,
++            GatewayRuntimeState::RestartInProgress,
++        ] {
++            for (index, (birth, requested)) in [
++                (Some("codex"), selected),
++                (Some("gpt-6-astra"), default),
++                (Some("gpt-6-astra"), selected),
++                (Some("gpt-6-astra"), claude),
++                (Some("gpt-6-astra"), api),
++                (None, default),
++                (None, selected),
++            ]
++            .into_iter()
++            .enumerate()
++            {
++                let manager = GatewayRuntimeManager::new(finished_child_exclusion());
++                let world_id = format!("refuse-{state:?}-{index}");
++                let path = manifest_path_for_world(&world_id, DEFAULT_BACKEND);
++                fs::create_dir_all(path.parent().unwrap()).unwrap();
++                let config = path.with_extension("toml");
++                fs::write(&path, b"original starting manifest").unwrap();
++                fs::write(&config, b"original live birth configuration").unwrap();
++                let runtime = ManagedGatewayRuntime {
++                    birth_model: birth,
++                    world_id: world_id.clone(),
++                    backend_id: DEFAULT_BACKEND.to_string(),
++                    port: 1,
++                    runtime_dir: path.parent().unwrap().to_path_buf(),
++                    config_path: config.clone(),
++                    manifest_path: path.clone(),
++                    pid_start_time_ticks: 0,
++                    process: Arc::new(Mutex::new(ManagedGatewayProcess::RediscoveredPid(
++                        std::process::id(),
++                    ))),
++                    state: Arc::new(RwLock::new(state)),
++                    privileged_child_exclusion_lease: ordinary_gateway_child_lease(),
++                };
++                manager.insert_runtime(runtime.clone());
++                let ctx = start_context_with_binding(temp.path(), &world_id, requested);
++                let before_manifest = fs::read(&path).unwrap();
++                let before_config = fs::read(&config).unwrap();
++                let before_modified = fs::metadata(&path).unwrap().modified().unwrap();
++                assert!(manager.sync(ctx.clone()).await.is_err());
++                assert!(manager.restart(ctx).await.is_err());
++                assert_eq!(runtime.state(), state);
++                assert_eq!(runtime.pid().unwrap(), std::process::id());
++                assert_eq!(fs::read(&path).unwrap(), before_manifest);
++                assert_eq!(fs::read(&config).unwrap(), before_config);
++                assert_eq!(
++                    fs::metadata(&path).unwrap().modified().unwrap(),
++                    before_modified
++                );
++            }
++        }
++        for requested in [default, selected, claude, api] {
++            let manager = GatewayRuntimeManager::new(finished_child_exclusion());
++            let world_id = format!("unproved-{}", requested.routed_model);
++            let path = manifest_path_for_world(&world_id, DEFAULT_BACKEND);
++            fs::create_dir_all(path.parent().unwrap()).unwrap();
++            fs::write(&path, b"legacy-or-starting-manifest-not-to-be-parsed").unwrap();
++            let ctx = start_context_with_binding(temp.path(), &world_id, requested);
++            assert!(manager.sync(ctx.clone()).await.is_err());
++            assert!(manager.restart(ctx).await.is_err());
++            assert_eq!(
++                fs::read(&path).unwrap(),
++                b"legacy-or-starting-manifest-not-to-be-parsed"
++            );
++        }
++    }
++
++    #[tokio::test]
++    async fn test_initial_model_default_guard_preserves_known_and_non_codex_defaults() {
++        let _env_lock = ENV_LOCK.lock().await;
++        let temp = TempDir::new().unwrap();
++        let _runtime_root = EnvGuard::set(
++            "SUBSTRATE_GATEWAY_RUNTIME_ROOT",
++            temp.path().join("runtime"),
++        );
++        let codex = resolve_gateway_backend_binding(DEFAULT_BACKEND).unwrap();
++        let claude = resolve_gateway_backend_binding(CLI_CLAUDE_CODE_HOST_BACKEND).unwrap();
++        let api = resolve_gateway_backend_binding(API_OPENAI_BACKEND).unwrap();
++        let mut checked = 0;
++        for state in [
++            GatewayRuntimeState::Ready,
++            GatewayRuntimeState::Starting,
++            GatewayRuntimeState::RestartInProgress,
++        ] {
++            for (index, (birth, requested)) in [
++                (Some(DEFAULT_ROUTED_MODEL), codex),
++                (Some(claude.routed_model), claude),
++                (None, claude),
++                (Some(api.routed_model), api),
++                (None, api),
++            ]
++            .into_iter()
++            .enumerate()
++            {
++                let manager = GatewayRuntimeManager::new(finished_child_exclusion());
++                let world_id = format!("default-compatible-{state:?}-{index}");
++                let path = manifest_path_for_world(&world_id, requested.backend_id);
++                fs::create_dir_all(path.parent().unwrap()).unwrap();
++                fs::write(&path, b"original default manifest").unwrap();
++                let config = path.with_extension("toml");
++                fs::write(&config, b"original default config").unwrap();
++                let runtime = ManagedGatewayRuntime {
++                    birth_model: birth,
++                    world_id: world_id.clone(),
++                    backend_id: requested.backend_id.to_string(),
++                    port: 1,
++                    runtime_dir: path.parent().unwrap().to_path_buf(),
++                    config_path: config.clone(),
++                    manifest_path: path.clone(),
++                    pid_start_time_ticks: 0,
++                    process: Arc::new(Mutex::new(ManagedGatewayProcess::RediscoveredPid(
++                        std::process::id(),
++                    ))),
++                    state: Arc::new(RwLock::new(state)),
++                    privileged_child_exclusion_lease: ordinary_gateway_child_lease(),
++                };
++                manager.insert_runtime(runtime.clone());
++                manager
++                    .validate_initial_model_reuse(&start_context_with_binding(
++                        temp.path(),
++                        &world_id,
++                        requested,
++                    ))
++                    .unwrap();
++                assert_eq!(runtime.state(), state);
++                assert_eq!(runtime.pid().unwrap(), std::process::id());
++                assert_eq!(fs::read(&path).unwrap(), b"original default manifest");
++                assert_eq!(fs::read(&config).unwrap(), b"original default config");
++                checked += 1;
++            }
++        }
++        assert_eq!(checked, 15);
++        eprintln!("default gateway guard admitted15 known/default or non-Codex birth cases without mutation; separate conflict matrix retains50 refusals");
++    }
++
++    #[test]
++    fn test_initial_model_gateway_mapping_allowlist_and_omitted_defaults() {
++        for backend in [
++            DEFAULT_BACKEND,
++            CLI_CODEX_HOST_BACKEND,
++            CLI_CODEX_WORLD_BACKEND,
++        ] {
++            let binding = resolve_initial_gateway_binding(
++                backend,
++                Some(transport_api_types::InitialCodexModel::Gpt6Astra),
++            )
++            .unwrap()
++            .unwrap();
++            let config: toml::Value =
++                toml::from_str(&render_integrated_config(4317, binding)).unwrap();
++            assert_eq!(config["router"]["default"].as_str(), Some("gpt-6-astra"));
++            assert_eq!(
++                config["providers"][0]["models"].as_array().unwrap(),
++                &[toml::Value::String("gpt-6-astra".to_string())]
++            );
++            assert_eq!(
++                config["models"][0]["mappings"][0]["actual_model"].as_str(),
++                Some("gpt-6-astra")
++            );
++            let default = resolve_initial_gateway_binding(backend, None)
++                .unwrap()
++                .unwrap();
++            assert_eq!(default.routed_model, "codex");
++            assert_eq!(default.actual_model, "codex-mini-latest");
++        }
++        for backend in [
++            API_OPENAI_BACKEND,
++            CLI_CLAUDE_CODE_HOST_BACKEND,
++            "not-a-backend",
++        ] {
++            assert!(resolve_initial_gateway_binding(
++                backend,
++                Some(transport_api_types::InitialCodexModel::Gpt6Astra)
++            )
++            .is_err());
++        }
++        for invalid in ["", "gpt-6-astra ", "codex"] {
++            let env = HashMap::from([(
++                transport_api_types::INITIAL_CODEX_MODEL_ENV.to_string(),
++                invalid.to_string(),
++            )]);
++            assert!(GatewayControlSettings::from_request_env(Some(&env)).is_err());
++        }
++    }
++
+     #[test]
+     fn integrated_config_rendering_is_binding_driven() {
+         let codex_binding =
+diff --git a/crates/world-service/src/service.rs b/crates/world-service/src/service.rs
+index 7e49611a32a613c5f9f150de0c8e37397f9ae2ff..8507fafa6aef98983bd927e1d42958e9a5b73f5a 100644
+--- a/crates/world-service/src/service.rs
++++ b/crates/world-service/src/service.rs
+@@ -69,9 +69,9 @@ use crate::e3_child_security::{E3PrivilegedChildExclusionV1, HeldNonE3Privileged
+ use crate::enforcement_plan;
+ #[cfg(target_os = "linux")]
+ use crate::gateway_runtime::{
+-    resolve_gateway_backend_binding, unavailable_response as gateway_unavailable_response_impl,
+-    GatewayControlSettings, GatewayRuntimeFailure, GatewayRuntimeManager,
+-    GatewayRuntimeStartContext, LinuxWorldPlacementContext,
++    unavailable_response as gateway_unavailable_response_impl, GatewayControlSettings,
++    GatewayRuntimeFailure, GatewayRuntimeManager, GatewayRuntimeStartContext,
++    LinuxWorldPlacementContext,
+ };
+ #[cfg(target_os = "linux")]
+ use crate::member_runtime::{MemberRuntimeLaunchAdmissionV1, MemberRuntimeManager};
+@@ -1972,6 +1972,7 @@ impl WorldService {
+             project_dir,
+             world_spec,
+             selected_backend,
++            initial_model: control.initial_model,
+             integrated_auth,
+         })
+     }
+@@ -2015,7 +2016,11 @@ impl WorldService {
+         prepared: PreparedGatewayRuntimeRequest,
+         mode: GatewayRuntimeBindingMode,
+     ) -> std::result::Result<Option<ResolvedGatewayRuntimeBinding>, GatewayRuntimeFailure> {
+-        let Some(binding) = resolve_gateway_backend_binding(&prepared.selected_backend) else {
++        let Some(binding) = crate::gateway_runtime::resolve_initial_gateway_binding(
++            &prepared.selected_backend,
++            prepared.initial_model,
++        )?
++        else {
+             return Ok(None);
+         };
+ 
+@@ -2141,6 +2146,7 @@ struct PreparedGatewayRuntimeRequest {
+     project_dir: PathBuf,
+     world_spec: WorldSpec,
+     selected_backend: String,
++    initial_model: Option<transport_api_types::InitialCodexModel>,
+     integrated_auth: Option<transport_api_types::GatewayIntegratedAuthPayloadV1>,
+ }
+ 
+@@ -2679,6 +2685,40 @@ mod gateway_runtime_binding_tests {
+         assert_ne!(base_id, changed_backend);
+     }
+ 
++    #[test]
++    fn test_initial_model_service_propagates_host_and_world_and_rejects_mismatch() {
++        let temp = TempDir::new().unwrap();
++        let service = WorldService::new().unwrap();
++        for backend in ["cli:codex", "cli:codex-host", "cli:codex-world"] {
++            let mut request = gateway_request_with_backend(temp.path(), backend);
++            request.integrated_auth.as_mut().unwrap().backend_id = backend.to_string();
++            request.env.as_mut().unwrap().insert(
++                transport_api_types::INITIAL_CODEX_MODEL_ENV.to_string(),
++                "gpt-6-astra".to_string(),
++            );
++            let prepared = service.prepare_gateway_runtime_request(&request).unwrap();
++            let binding = service
++                .resolve_gateway_runtime_binding(
++                    prepared,
++                    GatewayRuntimeBindingMode::ExistingSessionOnly,
++                )
++                .unwrap()
++                .unwrap();
++            assert_eq!(binding.start_context.binding.routed_model, "gpt-6-astra");
++            assert_eq!(binding.start_context.binding.actual_model, "gpt-6-astra");
++            request.integrated_auth.as_mut().unwrap().backend_id = "api:openai".to_string();
++            assert!(service.prepare_gateway_runtime_request(&request).is_err());
++        }
++        for backend in ["api:openai", "cli:claude_code-host"] {
++            let mut request = gateway_request_with_backend(temp.path(), backend);
++            request.env.as_mut().unwrap().insert(
++                transport_api_types::INITIAL_CODEX_MODEL_ENV.to_string(),
++                "gpt-6-astra".to_string(),
++            );
++            assert!(service.prepare_gateway_runtime_request(&request).is_err());
++        }
++    }
++
+     #[test]
+     fn request_preparation_accepts_valid_cli_codex() {
+         let temp_dir = TempDir::new().unwrap();
+diff --git a/docs/CONFIGURATION.md b/docs/CONFIGURATION.md
+index 4bf729256aec68d601729fcd1872f78eaea7a9e0..c006cafe950c387262cba7b54002afe24040e68d 100644
+--- a/docs/CONFIGURATION.md
++++ b/docs/CONFIGURATION.md
+@@ -774,3 +774,41 @@ publication and observation; reads never clean or complete it. Failure diagnosti
+ report the phase and known/uncertain staging/publication/durability effects. A failure
+ after rename can leave a visible valid owner record with unconfirmed durability. A
+ later read observes that record without retroactively confirming the failed write.
++
++## Initial Codex model selection
++
++On Linux, an initial public start can select the exact model `gpt-6-astra`:
++
++```sh
++substrate agent start --backend cli:codex-host --model gpt-6-astra --prompt 'Review this workspace'
++substrate agent start --backend cli:codex-world --scope world --model gpt-6-astra --prompt 'Review this workspace'
++```
++
++World scope starts the configured host orchestrator. Its actual backend must also
++be Codex. Selection requires an already enabled world and an enabled `in_world`
++gateway; it never enables either setting. Other models, native backends, platforms
++and `host_only` gateway mode are rejected. Omitting `--model` retains the existing
++`codex` route to `codex-mini-latest`.
++
++The initial selection and managed gateway endpoint are bound to the authenticated
++original session. Continuation and fork inherit that wiring; they have no model
++switch option. A session keeps its private native home for its existing lifetime.
++Missing or substituted context or native home causes refusal before native launch.
++Child native configuration cannot replace the selected model, provider, endpoint
++or ephemeral credential-store setting. Account credentials stay with the gateway.
++Stock native capabilities and WebSocket-to-HTTP fallback remain available.
++
++Selected startup refuses unsupported administrative Codex configuration under
++`/etc/codex` and the presence (including empty values) of
++`OPENAI_FEDERATION_RULE_ID`, `OPENAI_IDENTITY_TOKEN_FILE` or
++`OPENAI_WORKLOAD_IDENTITY_CONTEXT`. These workload-auth inputs cannot be safely
++removed through the existing per-launch wrapper environment map.
++
++A running Codex gateway cannot be reused for an explicit selection in this slice.
++A conflicting selection, an attempt to reset a selected runtime by omitting the
++option, or a recovered Codex runtime whose birth selection cannot be established
++is refused before recovery, restart or configuration rewrite. Existing runtime
++artifacts and processes are preserved on refusal. Non-Codex omitted lifecycle
++behavior is unchanged. The internal `SUBSTRATE_INITIAL_CODEX_MODEL` key is carried
++in the explicit lifecycle request environment; ambient process environment does
++not select a model.

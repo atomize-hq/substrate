@@ -1,0 +1,1882 @@
+diff --git a/crates/shell/src/execution/agent_runtime/host_session_authority/store.rs b/crates/shell/src/execution/agent_runtime/host_session_authority/store.rs
+index aea7f461b327c27d61ec35d66ed22178cc389cef..b6d7cd6263be185dfc2b6e2035673135bd04d429 100644
+--- a/crates/shell/src/execution/agent_runtime/host_session_authority/store.rs
++++ b/crates/shell/src/execution/agent_runtime/host_session_authority/store.rs
+@@ -37,6 +37,29 @@ pub(crate) use platform::{
+     WorldWorkReceiptRegistryPhysicalReadV1,
+ };
+ 
++#[cfg(target_os = "linux")]
++pub(super) use platform::ReadOnlyVersionedAuthorityTransactionV1;
++
++/// Hold the existing authority root lock while HSA authenticates typed objects.
++///
++/// Each read binds the caller's frozen store ID and root revision to the held
++/// snapshot. Returned bytes stay internal to HSA; callers must establish which
++/// reference is the current authority graph edge and where its context came from.
++/// Every captured file and namespace is revalidated on success and error exits.
++#[cfg(target_os = "linux")]
++#[allow(
++    dead_code,
++    reason = "TASK10 storage component precedes the current-exact resolver"
++)]
++pub(super) fn with_existing_typed_object_snapshot_opened<T>(
++    opened: &TrustedAuthorityRoot,
++    operation: impl FnOnce(
++        &ReadOnlyVersionedAuthorityTransactionV1<'_>,
++    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
++) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
++    platform::with_existing_typed_object_snapshot_opened(opened, operation)
++}
++
+ #[cfg(target_os = "linux")]
+ #[derive(Clone, Debug, Eq, PartialEq)]
+ pub(crate) struct AcceptedWorkAuthorityPhysicalSnapshotV1 {
+@@ -840,6 +863,19 @@ mod platform {
+     pub(super) use transaction::with_opened_config_projection_hsa_parent;
+     #[cfg(target_os = "linux")]
+     use transaction::with_opened_existing_versioned_read_only_snapshot;
++    #[cfg(target_os = "linux")]
++    pub(in crate::execution::agent_runtime::host_session_authority) use transaction::ReadOnlyVersionedAuthorityTransactionV1;
++
++    #[cfg(target_os = "linux")]
++    pub(super) fn with_existing_typed_object_snapshot_opened<T>(
++        opened: &TrustedAuthorityRoot,
++        operation: impl FnOnce(
++            &ReadOnlyVersionedAuthorityTransactionV1<'_>,
++        ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1>,
++    ) -> Result<T, ReadOnlyAuthoritySnapshotErrorV1> {
++        with_opened_existing_versioned_read_only_snapshot(opened, operation)
++    }
++
+     #[cfg(test)]
+     use transaction::with_semantic_preflight;
+     #[cfg(target_os = "linux")]
+diff --git a/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs b/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs
+index fb4b2acc4774598bcd7dc5bd56eca2ace7f81e10..bc6b501346ee8a2ecaa5c968b56d4abb6913a163 100644
+--- a/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs
++++ b/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs
+@@ -241,6 +241,34 @@ pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
+     bytes: &[u8],
+     context: Option<&ObjectVerificationContextV1>,
+     allow_verification_only: bool,
++) -> Result<(), BootstrapError> {
++    verify_object_bytes_with_key_loader(
++        root,
++        reference,
++        bytes,
++        context,
++        allow_verification_only,
++        |record| {
++            let key_file = layout
++                .keys
++                .open_file(&format!("{}.key", record.key_id))
++                .map_err(|_| BootstrapError("open sensitive object key"))?;
++            key_file
++                .read_all()
++                .map_err(|_| BootstrapError("read sensitive object key"))
++        },
++    )
++}
++
++// Keep verification independent of filesystem access so a read-only transaction can
++// supply captured key bytes while existing callers retain their original loader.
++pub(super) fn verify_object_bytes_with_key_loader<R: ObjectVerificationRootV1>(
++    root: &R,
++    reference: &AuthorityObjectRefV1,
++    bytes: &[u8],
++    context: Option<&ObjectVerificationContextV1>,
++    allow_verification_only: bool,
++    load_key: impl FnOnce(&AuthorityStoreCommitmentKeyV1) -> Result<Vec<u8>, BootstrapError>,
+ ) -> Result<(), BootstrapError> {
+     validate_ref_id(&reference.ref_id)
+         .map_err(|_| BootstrapError("typed object ref ID is invalid"))?;
+@@ -331,16 +359,8 @@ pub(super) fn verify_object_bytes<R: ObjectVerificationRootV1>(
+                     }
+                 })
+                 .ok_or(BootstrapError("sensitive object key is unavailable"))?;
+-            let key_file = layout
+-                .keys
+-                .open_file(&format!("{}.key", record.key_id))
+-                .map_err(|_| BootstrapError("open sensitive object key"))?;
+-            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(
+-                &key_file
+-                    .read_all()
+-                    .map_err(|_| BootstrapError("read sensitive object key"))?,
+-            )
+-            .map_err(|_| BootstrapError("decode sensitive object key"))?;
++            let envelope = AuthorityStoreCommitmentKeyFileV1::decode(&load_key(record)?)
++                .map_err(|_| BootstrapError("decode sensitive object key"))?;
+             let actual = store_hmac_sha256(
+                 &envelope.secret_key,
+                 expected_domain,
+@@ -516,7 +536,7 @@ pub(super) fn canonical_digest(
+     }
+ }
+ 
+-fn canonical_schema_version(bytes: &[u8]) -> Result<u32, BootstrapError> {
++pub(super) fn canonical_schema_version(bytes: &[u8]) -> Result<u32, BootstrapError> {
+     let value = serde_json::from_slice::<serde_json::Value>(bytes)
+         .map_err(|_| BootstrapError("canonical object bytes are invalid"))?;
+     let version = value
+diff --git a/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs b/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs
+index a801d7b3a20308df271a27c0748e3f1d05fe490f..b2bf7237755f75a39700de51bacf8f997ac35b62 100644
+--- a/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs
++++ b/crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs
+@@ -290,7 +290,9 @@ impl ReadOnlyB1NamespaceGuardV1 {
+ }
+ 
+ #[cfg(target_os = "linux")]
+-pub(super) struct ReadOnlyVersionedAuthorityTransactionV1<'root> {
++pub(in crate::execution::agent_runtime::host_session_authority) struct ReadOnlyVersionedAuthorityTransactionV1<
++    'root,
++> {
+     supplied_root: &'root TrustedAuthorityRoot,
+     reopened_root: TrustedAuthorityRoot,
+     bootstrap_metadata: TrustedEntryMetadataV1,
+@@ -306,12 +308,256 @@ pub(super) struct ReadOnlyVersionedAuthorityTransactionV1<'root> {
+     decoded_root: VersionedStateRoot,
+     e2_guard: RefCell<Option<ReadOnlyE2NamespaceGuardV1>>,
+     b1_guard: RefCell<Option<ReadOnlyB1NamespaceGuardV1>>,
++    typed_object_guards: RefCell<Vec<ReadOnlyTypedObjectGuardV1>>,
+     _root_lock_file: TrustedFile,
+     _lock: TrustedOwnedFileLock,
+ }
+ 
++#[cfg(target_os = "linux")]
++#[derive(Default)]
++struct ReadOnlyTypedObjectGuardV1 {
++    objects: Option<ReadOnlyDirectoryGuardV1>,
++    kind: Option<ReadOnlyDirectoryGuardV1>,
++    version: Option<ReadOnlyDirectoryGuardV1>,
++    object: Option<ReadOnlyFileGuardV1>,
++    keys: Option<ReadOnlyDirectoryGuardV1>,
++    key: Option<ReadOnlyFileGuardV1>,
++}
++
++#[cfg(target_os = "linux")]
++impl ReadOnlyTypedObjectGuardV1 {
++    fn verify(&self, authority: &TrustedDirectory) -> Result<(), ReadOnlyAuthoritySnapshotErrorV1> {
++        if let Some(objects) = &self.objects {
++            objects.verify(authority)?;
++            if let Some(kind) = &self.kind {
++                kind.verify(&objects.directory)?;
++                if let Some(version) = &self.version {
++                    version.verify(&kind.directory)?;
++                    if let Some(object) = &self.object {
++                        object.verify(&version.directory)?;
++                    }
++                    version.verify(&kind.directory)?;
++                }
++                kind.verify(&objects.directory)?;
++            }
++            objects.verify(authority)?;
++        }
++        if let Some(keys) = &self.keys {
++            keys.verify(authority)?;
++            if let Some(key) = &self.key {
++                key.verify(&keys.directory)?;
++            }
++            keys.verify(authority)?;
++        }
++        Ok(())
++    }
++}
++
++#[cfg(target_os = "linux")]
++fn typed_object_read_error(operation: &'static str) -> ReadOnlyAuthoritySnapshotErrorV1 {
++    ReadOnlyAuthoritySnapshotErrorV1::Io { operation }
++}
++
++#[cfg(target_os = "linux")]
++fn capture_typed_object_directory(
++    parent: &TrustedDirectory,
++    manifest: &[DirectoryEntry],
++    name: &str,
++    namespace: &'static str,
++) -> Result<ReadOnlyDirectoryGuardV1, ReadOnlyAuthoritySnapshotErrorV1> {
++    let entry = manifest
++        .iter()
++        .find(|entry| entry.name == name)
++        .ok_or_else(|| typed_object_read_error("typed object namespace is absent"))?;
++    ReadOnlyDirectoryGuardV1::capture(parent, entry, namespace)
++}
++
+ #[cfg(target_os = "linux")]
+ impl ReadOnlyVersionedAuthorityTransactionV1<'_> {
++    /// Read an indexed object against this locked snapshot's frozen store and revision.
++    ///
++    /// Bytes remain inside HSA. The supplied reference's commitment authenticates
++    /// the captured bytes; the index binds its ID, kind, schema and present state.
++    /// Selecting that reference from the current authority graph and establishing
++    /// the provenance of its parent context remain the caller's responsibility.
++    pub(in crate::execution::agent_runtime::host_session_authority) fn read_typed_object(
++        &self,
++        expected_authority_store_id: &str,
++        expected_root_revision: u64,
++        reference: &AuthorityObjectRefV1,
++        context: Option<&ObjectVerificationContextV1>,
++    ) -> Result<Vec<u8>, ReadOnlyAuthoritySnapshotErrorV1> {
++        if self.decoded_root.authority_store_id() != expected_authority_store_id {
++            return Err(typed_object_read_error(
++                "frozen HSA authority store mismatch",
++            ));
++        }
++        if self.decoded_root.root_revision() != expected_root_revision {
++            return Err(typed_object_read_error("frozen HSA root revision mismatch"));
++        }
++        match &self.decoded_root {
++            VersionedStateRoot::V2(root) => self.capture_typed_object(root, reference, context),
++            VersionedStateRoot::V3(root) => self.capture_typed_object(root, reference, context),
++            VersionedStateRoot::V1(_) => Err(typed_object_read_error(
++                "typed object snapshot requires StateRootV2 or StateRootV3",
++            )),
++        }
++    }
++
++    fn capture_typed_object<R: object_persistence::ObjectVerificationRootV1>(
++        &self,
++        root: &R,
++        reference: &AuthorityObjectRefV1,
++        context: Option<&ObjectVerificationContextV1>,
++    ) -> Result<Vec<u8>, ReadOnlyAuthoritySnapshotErrorV1> {
++        let mut guard = ReadOnlyTypedObjectGuardV1::default();
++        let result = (|| {
++            validate_ref_id(&reference.ref_id)
++                .map_err(|_| typed_object_read_error("typed object ref ID is invalid"))?;
++            let index = root
++                .object_index()
++                .get(&reference.ref_id)
++                .filter(|index| {
++                    index.schema_version == 1
++                        && index.ref_id == reference.ref_id
++                        && index.object_kind == reference.object_kind
++                        && index.object_schema_version == reference.schema_version
++                        && index.storage_state == AuthorityObjectStorageStateV1::Present
++                })
++                .ok_or_else(|| {
++                    typed_object_read_error("typed object has no exact present index entry")
++                })?;
++            guard.objects = Some(capture_typed_object_directory(
++                &self.authority.directory,
++                &self.authority.manifest,
++                "objects",
++                "authority-v1/objects",
++            )?);
++            let objects = guard
++                .objects
++                .as_ref()
++                .ok_or_else(|| typed_object_read_error("retain captured objects directory"))?;
++            guard.kind = Some(capture_typed_object_directory(
++                &objects.directory,
++                &objects.manifest,
++                kind_slug(reference.object_kind),
++                "authority-v1/objects/kind",
++            )?);
++            let kind = guard
++                .kind
++                .as_ref()
++                .ok_or_else(|| typed_object_read_error("retain captured object kind directory"))?;
++            guard.version = Some(capture_typed_object_directory(
++                &kind.directory,
++                &kind.manifest,
++                &format!("v{}", reference.schema_version),
++                "authority-v1/objects/kind/version",
++            )?);
++            let version = guard.version.as_ref().ok_or_else(|| {
++                typed_object_read_error("retain captured object version directory")
++            })?;
++            let object_name = format!("{}.obj", reference.ref_id);
++            let entry = version
++                .manifest
++                .iter()
++                .find(|entry| entry.name == object_name)
++                .ok_or_else(|| typed_object_read_error("typed object file is absent"))?;
++            guard.object = Some(ReadOnlyFileGuardV1::capture(
++                &version.directory,
++                entry,
++                "authority-v1/objects/kind/version",
++            )?);
++            let object = guard
++                .object
++                .as_ref()
++                .ok_or_else(|| typed_object_read_error("retain captured object file"))?;
++            if object.bytes.len() as u64 != index.byte_length {
++                return Err(typed_object_read_error("typed object byte length mismatch"));
++            }
++            if matches!(
++                reference.commitment,
++                AuthorityObjectCommitmentV1::CanonicalSha256 { .. }
++            ) {
++                let schema_version = object_persistence::canonical_schema_version(&object.bytes)
++                    .map_err(|error| typed_object_read_error(error.0))?;
++                if schema_version != reference.schema_version {
++                    return Err(typed_object_read_error(
++                        "canonical object schema version mismatch",
++                    ));
++                }
++            }
++            if let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } =
++                &reference.commitment
++            {
++                let record = root
++                    .commitment_key_registry()
++                    .get(key_id)
++                    .filter(|record| record.state != AuthorityStoreCommitmentKeyStateV1::Retired)
++                    .ok_or_else(|| {
++                        typed_object_read_error("sensitive object key is unavailable")
++                    })?;
++                guard.keys = Some(capture_typed_object_directory(
++                    &self.authority.directory,
++                    &self.authority.manifest,
++                    "keys",
++                    "authority-v1/keys",
++                )?);
++                let keys = guard
++                    .keys
++                    .as_ref()
++                    .ok_or_else(|| typed_object_read_error("retain captured keys directory"))?;
++                let key_name = format!("{}.key", record.key_id);
++                let entry = keys
++                    .manifest
++                    .iter()
++                    .find(|entry| entry.name == key_name)
++                    .ok_or_else(|| {
++                        typed_object_read_error("sensitive object key file is absent")
++                    })?;
++                guard.key = Some(ReadOnlyFileGuardV1::capture(
++                    &keys.directory,
++                    entry,
++                    "authority-v1/keys",
++                )?);
++                let key = guard
++                    .key
++                    .as_ref()
++                    .ok_or_else(|| typed_object_read_error("retain captured key file"))?;
++                let envelope = AuthorityStoreCommitmentKeyFileV1::decode(&key.bytes)
++                    .map_err(|_| typed_object_read_error("decode sensitive object key"))?;
++                if envelope.authority_store_id != root.authority_store_id()
++                    || envelope.authority_store_id != record.authority_store_id
++                    || envelope.key_id != *key_id
++                    || envelope.key_id != record.key_id
++                    || envelope.created_at != record.created_at
++                {
++                    return Err(typed_object_read_error(
++                        "sensitive object key identity mismatch",
++                    ));
++                }
++            }
++            object_persistence::verify_object_bytes_with_key_loader(
++                root,
++                reference,
++                &object.bytes,
++                context,
++                true,
++                |_| {
++                    guard
++                        .key
++                        .as_ref()
++                        .map(|key| key.bytes.clone())
++                        .ok_or(BootstrapError("captured sensitive object key is absent"))
++                },
++            )
++            .map_err(|error| typed_object_read_error(error.0))?;
++            Ok(object.bytes.clone())
++        })();
++        // Retain partial traversals and captured bytes even when validation fails.
++        self.typed_object_guards.borrow_mut().push(guard);
++        result
++    }
++
+     pub(super) fn authority_directory(&self) -> &TrustedDirectory {
+         &self.authority.directory
+     }
+@@ -532,6 +778,9 @@ impl ReadOnlyVersionedAuthorityTransactionV1<'_> {
+         if let Some(guard) = self.b1_guard.borrow().as_ref() {
+             guard.verify(self.reopened_root.directory())?;
+         }
++        for guard in self.typed_object_guards.borrow().iter() {
++            guard.verify(&self.authority.directory)?;
++        }
+         self.root_file.verify(&self.authority.directory)?;
+         self.authority.verify(self.reopened_root.directory())?;
+         self.supplied_root
+@@ -748,6 +997,7 @@ pub(super) fn with_opened_existing_versioned_read_only_snapshot<T>(
+         decoded_root,
+         e2_guard: RefCell::new(None),
+         b1_guard: RefCell::new(None),
++        typed_object_guards: RefCell::new(Vec::new()),
+         _root_lock_file: root_lock_file,
+         _lock: lock,
+     };
+diff --git a/crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs b/crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs
+index 12f8bde9eba63e34a27ce080f40ae6677c1cdf3d..3dbc27ea807ad20a154d25fcb06d36bd451db952 100644
+--- a/crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs
++++ b/crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs
+@@ -4707,3 +4707,1466 @@ fn legacy_transaction_directory_read_retains_enumerated_descendant_identity() {
+         b"original"
+     );
+ }
++
++#[cfg(target_os = "linux")]
++mod typed_object_snapshot {
++    use super::*;
++    use crate::execution::agent_runtime::host_session_authority::{
++        facade::HostSessionAuthority,
++        schema::{
++            AgentDescriptorV1, AgentExecutionScopeV1, HostAttachCapabilitiesV1,
++            HostAttachExecutionClientStartV1, HostAttachLaunchKnobsV1, HostAttachModePreferenceV1,
++            RuntimeBackendKindV1,
++        },
++        store_format::{AuthorityStoreCommitmentKeyFileV1, TempNameV1},
++        transition::{
++            IssueHostSessionTransitionRequestV1, StartContractMaterialV1, TransitionIssueOutcomeV1,
++        },
++    };
++    use std::collections::BTreeMap;
++    use std::os::unix::fs::{symlink, MetadataExt};
++
++    struct Fixture {
++        home: tempfile::TempDir,
++        opened: TrustedAuthorityRoot,
++        frozen: VersionedStateRoot,
++        intent: HostSessionTransitionIntentV2,
++    }
++
++    impl Fixture {
++        fn published(v3: bool) -> Self {
++            let home = root();
++            let authority = HostSessionAuthority::open(home.path()).unwrap();
++            let initial = authority.bootstrap().unwrap();
++            let request = IssueHostSessionTransitionRequestV1 {
++                intent_id: "snapshot-intent".into(),
++                issuer_request_id: "snapshot-request".into(),
++                mode: HostSessionTransitionModeV1::Start,
++                authority_precondition: HostSessionAuthorityPreconditionV1::ExpectedAbsent,
++                orchestration_session_id: "snapshot-session".into(),
++                shell_trace_session_id: "snapshot-trace".into(),
++                caller: HostSessionTransitionCallerV1 {
++                    kind: HostSessionTransitionCallerKindV1::PublicCli,
++                    caller_participant_id: None,
++                    auto_attach_obligation_id: None,
++                    auto_attach_claim_owner: None,
++                },
++                source_authoritative_participant_id: None,
++                target_authoritative_participant_id: "snapshot-participant".into(),
++                target_participant_lease_token: b"snapshot-lease".to_vec(),
++                run_id: "snapshot-run".into(),
++                resulting_authoritative_lineage: vec!["snapshot-participant".into()],
++                workspace_binding: WorkspaceBindingV1 {
++                    workspace_root: initial.bootstrap_home.clone(),
++                    authority_store_root: initial.bootstrap_home,
++                    authority_store_id: initial.authority_store_id,
++                },
++                world_binding: None,
++                start_contract: StartContractMaterialV1 {
++                    descriptor: AgentDescriptorV1 {
++                        schema_version: 1,
++                        agent_id: "codex".into(),
++                        backend_id: "cli:codex".into(),
++                        backend_kind: RuntimeBackendKindV1::Codex,
++                        protocol: "substrate.agent.session".into(),
++                        execution_scope: AgentExecutionScopeV1::Host,
++                        binary_path: "/usr/bin/codex".into(),
++                    },
++                    policy: PolicyObjectHashInputV1 {
++                        schema_version: 1,
++                        policy_revision: "snapshot-policy".into(),
++                        canonical_policy_snapshot_sha256: "aa".repeat(32),
++                    },
++                    capabilities: HostAttachCapabilitiesV1 {
++                        session_resume: true,
++                        session_fork: true,
++                        session_stop: true,
++                        status_snapshot: true,
++                        event_stream: true,
++                    },
++                    launch_knobs: HostAttachLaunchKnobsV1 {
++                        requested_execution_scope: AgentExecutionScopeV1::Host,
++                        host_execution_client_start: HostAttachExecutionClientStartV1::StartNow,
++                        attach_mode_preference: HostAttachModePreferenceV1::ContinuityPreferred,
++                    },
++                },
++                transition_input: Some(b"snapshot-input".to_vec()),
++            };
++            let TransitionIssueOutcomeV1::Issued(intent) = authority
++                .issue_start_at(
++                    &request,
++                    TimestampV1::parse("2026-10-27T12:00:00.000000000Z").unwrap(),
++                    300,
++                )
++                .unwrap()
++            else {
++                panic!("production start must be published")
++            };
++            let opened = TrustedAuthorityRoot::open(home.path()).unwrap();
++            let mut frozen = read_opened_root_v2_or_v3(&opened).unwrap();
++            if v3 {
++                let VersionedStateRoot::V2(current) = &frozen else {
++                    panic!("expected V2")
++                };
++                frozen = VersionedStateRoot::V3(
++                    upgrade_v2_root_to_v3_exact_current_opened(&opened, current, || Ok(()))
++                        .unwrap(),
++                );
++            }
++            Self {
++                home,
++                opened,
++                frozen,
++                intent,
++            }
++        }
++
++        fn context(&self, transport: bool) -> ObjectVerificationContextV1 {
++            ObjectVerificationContextV1 {
++                intent_id: self.intent.intent_id.clone(),
++                run_id: self.intent.run_id.clone(),
++                parent_intent: transport.then(|| {
++                    VersionedObjectVerificationParentIntentV1::V2(Box::new(self.intent.clone()))
++                }),
++            }
++        }
++
++        fn object_path(&self, reference: &AuthorityObjectRefV1) -> std::path::PathBuf {
++            let kind = match reference.object_kind {
++                AuthorityObjectKindV1::AgentDescriptor => "agent-descriptor",
++                AuthorityObjectKindV1::LeaseToken => "lease-token",
++                AuthorityObjectKindV1::TransitionInput => "transition-input",
++                AuthorityObjectKindV1::TransitionTransportPayload => "transition-transport-payload",
++                _ => panic!("fixture object kind"),
++            };
++            self.home
++                .path()
++                .join("authority-v1/objects")
++                .join(kind)
++                .join(format!("v{}", reference.schema_version))
++                .join(format!("{}.obj", reference.ref_id))
++        }
++
++        fn key_path(&self) -> std::path::PathBuf {
++            let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } =
++                &self.intent.target_participant_lease_token_ref.commitment
++            else {
++                panic!("HMAC fixture")
++            };
++            self.home
++                .path()
++                .join("authority-v1/keys")
++                .join(format!("{key_id}.key"))
++        }
++
++        fn read(
++            &self,
++            reference: &AuthorityObjectRefV1,
++            context: Option<&ObjectVerificationContextV1>,
++        ) -> Result<Vec<u8>, ReadOnlyAuthoritySnapshotErrorV1> {
++            with_existing_typed_object_snapshot_opened(&self.opened, |snapshot| {
++                snapshot.read_typed_object(
++                    self.frozen.authority_store_id(),
++                    self.frozen.root_revision(),
++                    reference,
++                    context,
++                )
++            })
++        }
++
++        fn unchanged_error(
++            &self,
++            reference: &AuthorityObjectRefV1,
++            context: Option<&ObjectVerificationContextV1>,
++        ) -> ReadOnlyAuthoritySnapshotErrorV1 {
++            let before = tree(self.home.path());
++            let error = self.read(reference, context).unwrap_err();
++            assert!(
++                before == tree(self.home.path()),
++                "read failure changed persistent state"
++            );
++            error
++        }
++
++        // Negative-only mutation of an already production-published root. Root
++        // validation remains enabled; malformed relations may refuse before read.
++        fn mutate_root(&self, change: impl FnOnce(&mut StateRootV2)) {
++            let VersionedStateRoot::V2(mut root) = self.frozen.clone() else {
++                panic!("V2 fault fixture")
++            };
++            change(&mut root);
++            fs::write(
++                self.home.path().join("authority-v1/state-root-v1.json"),
++                canonical_json::to_vec(&root).unwrap(),
++            )
++            .unwrap();
++        }
++    }
++
++    #[derive(PartialEq, Eq)]
++    struct EntryState {
++        metadata: (u64, u64, u32, u32, u32, u64, u64, i64, i64, i64, i64),
++        bytes: Vec<u8>,
++        link: Option<std::path::PathBuf>,
++    }
++
++    fn tree(root: &std::path::Path) -> BTreeMap<std::path::PathBuf, EntryState> {
++        fn visit(
++            root: &std::path::Path,
++            path: &std::path::Path,
++            result: &mut BTreeMap<std::path::PathBuf, EntryState>,
++        ) {
++            let metadata = fs::symlink_metadata(path).unwrap();
++            result.insert(
++                path.strip_prefix(root).unwrap().to_owned(),
++                EntryState {
++                    metadata: (
++                        metadata.dev(),
++                        metadata.ino(),
++                        metadata.mode(),
++                        metadata.uid(),
++                        metadata.gid(),
++                        metadata.nlink(),
++                        metadata.len(),
++                        metadata.mtime(),
++                        metadata.mtime_nsec(),
++                        metadata.ctime(),
++                        metadata.ctime_nsec(),
++                    ),
++                    bytes: if metadata.is_file() {
++                        fs::read(path).unwrap()
++                    } else {
++                        Vec::new()
++                    },
++                    link: metadata
++                        .file_type()
++                        .is_symlink()
++                        .then(|| fs::read_link(path).unwrap()),
++                },
++            );
++            if metadata.is_dir() {
++                for entry in fs::read_dir(path).unwrap() {
++                    visit(root, &entry.unwrap().path(), result);
++                }
++            }
++        }
++        let mut result = BTreeMap::new();
++        visit(root, root, &mut result);
++        result
++    }
++
++    fn io(operation: &'static str) -> ReadOnlyAuthoritySnapshotErrorV1 {
++        ReadOnlyAuthoritySnapshotErrorV1::Io { operation }
++    }
++
++    #[test]
++    fn test_production_published_v2_v3_multi_object_reads_are_unchanged() {
++        for v3 in [false, true] {
++            let fixture = Fixture::published(v3);
++            let refs = [
++                (&fixture.intent.descriptor_ref, None),
++                (
++                    &fixture.intent.target_participant_lease_token_ref,
++                    Some(fixture.context(false)),
++                ),
++                (
++                    fixture.intent.transition_input_ref.as_ref().unwrap(),
++                    Some(fixture.context(false)),
++                ),
++                (
++                    &fixture.intent.transport_payload_ref,
++                    Some(fixture.context(true)),
++                ),
++            ];
++            let before = tree(fixture.home.path());
++            with_existing_typed_object_snapshot_opened(&fixture.opened, |snapshot| {
++                for (reference, context) in &refs {
++                    let bytes = snapshot.read_typed_object(
++                        fixture.frozen.authority_store_id(),
++                        fixture.frozen.root_revision(),
++                        reference,
++                        context.as_ref(),
++                    )?;
++                    assert!(bytes == fs::read(fixture.object_path(reference)).unwrap());
++                }
++                Ok(())
++            })
++            .unwrap();
++            assert!(
++                before == tree(fixture.home.path()),
++                "successful reads changed persistent state"
++            );
++        }
++    }
++
++    #[test]
++    fn test_frozen_binding_and_exact_reference_fail_without_mutation() {
++        let fixture = Fixture::published(false);
++        let before = tree(fixture.home.path());
++        for (store, revision, expected) in [
++            (
++                "as_00000000000000000000000000000000",
++                fixture.frozen.root_revision(),
++                io("frozen HSA authority store mismatch"),
++            ),
++            (
++                fixture.frozen.authority_store_id(),
++                fixture.frozen.root_revision() + 1,
++                io("frozen HSA root revision mismatch"),
++            ),
++        ] {
++            let error = with_existing_typed_object_snapshot_opened(&fixture.opened, |snapshot| {
++                snapshot.read_typed_object(store, revision, &fixture.intent.descriptor_ref, None)
++            })
++            .unwrap_err();
++            assert_eq!(error, expected);
++        }
++        assert!(before == tree(fixture.home.path()));
++        for case in 0..5 {
++            let mut reference = fixture.intent.descriptor_ref.clone();
++            match case {
++                0 => reference.ref_id = "ao_00000000000000000000000000000000".into(),
++                1 => reference.object_kind = AuthorityObjectKindV1::Policy,
++                2 => reference.schema_version = 2,
++                3 => reference.ref_id = "../unsafe".into(),
++                _ => {
++                    reference.commitment = AuthorityObjectCommitmentV1::CanonicalSha256 {
++                        digest_hex: "00".repeat(32),
++                    }
++                }
++            }
++            let expected = match case {
++                0..=2 => "typed object has no exact present index entry",
++                3 => "typed object ref ID is invalid",
++                _ => "canonical object commitment mismatch",
++            };
++            assert_eq!(fixture.unchanged_error(&reference, None), io(expected));
++        }
++        assert_eq!(
++            fixture.unchanged_error(
++                &fixture.intent.descriptor_ref,
++                Some(&fixture.context(false))
++            ),
++            io("canonical object has unexpected parent context")
++        );
++    }
++
++    #[test]
++    fn test_hmac_context_domain_commitment_and_parent_are_bound() {
++        let fixture = Fixture::published(true);
++        let lease = &fixture.intent.target_participant_lease_token_ref;
++        assert_eq!(
++            fixture.unchanged_error(lease, None),
++            io("sensitive object parent context is missing")
++        );
++        for case in 0..5 {
++            let mut reference = lease.clone();
++            let mut context = fixture.context(false);
++            match case {
++                0 => context.intent_id.push_str("-other"),
++                1 => context.run_id.push_str("-other"),
++                2 => {
++                    let AuthorityObjectCommitmentV1::StoreHmacSha256 { domain, .. } =
++                        &mut reference.commitment
++                    else {
++                        unreachable!()
++                    };
++                    domain.push_str("-other");
++                }
++                3 => {
++                    let AuthorityObjectCommitmentV1::StoreHmacSha256 { digest_hex, .. } =
++                        &mut reference.commitment
++                    else {
++                        unreachable!()
++                    };
++                    *digest_hex = "00".repeat(32);
++                }
++                _ => context.parent_intent = fixture.context(true).parent_intent,
++            }
++            let expected = match case {
++                2 => "typed object commitment rule is invalid",
++                4 => "sensitive object has an unexpected full parent",
++                _ => "sensitive object commitment mismatch",
++            };
++            assert_eq!(
++                fixture.unchanged_error(&reference, Some(&context)),
++                io(expected)
++            );
++        }
++        let transport = &fixture.intent.transport_payload_ref;
++        assert_eq!(
++            fixture.unchanged_error(transport, Some(&fixture.context(false))),
++            io("transport payload parent is missing")
++        );
++        for case in 0..4 {
++            let mut context = fixture.context(true);
++            let mut reference = transport.clone();
++            let Some(VersionedObjectVerificationParentIntentV1::V2(parent)) =
++                &mut context.parent_intent
++            else {
++                unreachable!()
++            };
++            match case {
++                0 => context.run_id.push_str("-other"),
++                1 => {
++                    parent.transport_payload_ref.ref_id =
++                        "ao_00000000000000000000000000000000".into()
++                }
++                2 => parent
++                    .target_authoritative_participant_id
++                    .push_str("-other"),
++                _ => {
++                    let AuthorityObjectCommitmentV1::StoreHmacSha256 { digest_hex, .. } =
++                        &mut reference.commitment
++                    else {
++                        unreachable!()
++                    };
++                    *digest_hex = "00".repeat(32);
++                }
++            }
++            let expected = if case == 2 {
++                "transport payload and V2 parent intent disagree"
++            } else {
++                "transport ref or HMAC context disagrees with V2 parent"
++            };
++            assert_eq!(
++                fixture.unchanged_error(&reference, Some(&context)),
++                io(expected)
++            );
++        }
++    }
++
++    #[test]
++    fn test_key_envelope_identity_and_bytes_are_checked_after_capture() {
++        for case in 0..6 {
++            let fixture = Fixture::published(false);
++            let path = fixture.key_path();
++            let mut envelope =
++                AuthorityStoreCommitmentKeyFileV1::decode(&fs::read(&path).unwrap()).unwrap();
++            match case {
++                0 => envelope.authority_store_id = "as_00000000000000000000000000000000".into(),
++                1 => envelope.key_id = "ak_00000000000000000000000000000000".into(),
++                2 => {
++                    envelope.created_at =
++                        TimestampV1::parse("2026-10-01T12:00:00.000000000Z").unwrap()
++                }
++                3 => envelope.secret_key[0] ^= 1,
++                4 => {
++                    fs::write(&path, b"corrupt envelope").unwrap();
++                }
++                _ => {
++                    fs::remove_file(&path).unwrap();
++                }
++            }
++            if case < 4 {
++                fs::write(&path, envelope.encode().unwrap()).unwrap();
++            }
++            let expected = match case {
++                0..=2 => "sensitive object key identity mismatch",
++                3 => "sensitive object commitment mismatch",
++                4 => "decode sensitive object key",
++                _ => "sensitive object key file is absent",
++            };
++            assert_eq!(
++                fixture.unchanged_error(
++                    &fixture.intent.target_participant_lease_token_ref,
++                    Some(&fixture.context(false))
++                ),
++                io(expected)
++            );
++        }
++    }
++
++    #[test]
++    fn test_index_faults_keep_root_validation_and_present_checks() {
++        for case in 0..6 {
++            let fixture = Fixture::published(false);
++            fixture.mutate_root(|root| {
++                let entry = root
++                    .object_index
++                    .get_mut(&fixture.intent.descriptor_ref.ref_id)
++                    .unwrap();
++                match case {
++                    0 => entry.ref_id = "ao_00000000000000000000000000000000".into(),
++                    1 => entry.object_kind = AuthorityObjectKindV1::Policy,
++                    2 => entry.object_schema_version = 2,
++                    3 => {
++                        entry.storage_state = AuthorityObjectStorageStateV1::Released {
++                            terminal_handoff_ref: placeholder_ref(
++                                "ao_00000000000000000000000000000000",
++                                AuthorityObjectKindV1::TerminalHandoff,
++                            ),
++                            released_at: TimestampV1::parse("2026-10-27T12:00:00.000000000Z")
++                                .unwrap(),
++                        }
++                    }
++                    4 => entry.byte_length += 1,
++                    _ => {
++                        root.object_index
++                            .remove(&fixture.intent.descriptor_ref.ref_id);
++                    }
++                }
++            });
++            let error = fixture.unchanged_error(&fixture.intent.descriptor_ref, None);
++            // ID/schema/release conflicts refuse during root decoding. A wrong
++            // descriptor kind or missing descriptor index reaches the new reader.
++            let expected = match case {
++                0 | 2 | 3 => ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid,
++                4 => io("typed object byte length mismatch"),
++                _ => io("typed object has no exact present index entry"),
++            };
++            assert_eq!(error, expected, "index fault {case}");
++        }
++    }
++
++    #[test]
++    fn test_missing_and_corrupt_object_material_is_nonmutating() {
++        for case in 0..4 {
++            let fixture = Fixture::published(false);
++            let path = fixture.object_path(&fixture.intent.descriptor_ref);
++            match case {
++                0 => fs::remove_file(&path).unwrap(),
++                1 => {
++                    let mut bytes = fs::read(&path).unwrap();
++                    bytes[0] = b'!';
++                    fs::write(&path, bytes).unwrap();
++                }
++                2 => fs::write(&path, b"short").unwrap(),
++                _ => fs::remove_dir_all(path.parent().unwrap()).unwrap(),
++            }
++            let expected = match case {
++                0 => "typed object file is absent",
++                1 => "canonical object bytes are invalid",
++                2 => "typed object byte length mismatch",
++                _ => "typed object namespace is absent",
++            };
++            assert_eq!(
++                fixture.unchanged_error(&fixture.intent.descriptor_ref, None),
++                io(expected)
++            );
++        }
++    }
++
++    #[test]
++    fn test_unsafe_object_key_and_namespace_material_refuses_without_repair() {
++        for is_key in [false, true] {
++            for case in 0..4 {
++                let fixture = Fixture::published(false);
++                let path = if is_key {
++                    fixture.key_path()
++                } else {
++                    fixture.object_path(&fixture.intent.target_participant_lease_token_ref)
++                };
++                match case {
++                    0 => {
++                        let held = path.with_extension("held");
++                        fs::rename(&path, &held).unwrap();
++                        symlink(&held, &path).unwrap();
++                    }
++                    1 => fs::hard_link(&path, path.with_extension("hardlink")).unwrap(),
++                    2 => fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap(),
++                    _ => {
++                        fs::remove_file(&path).unwrap();
++                        fs::create_dir(&path).unwrap();
++                        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
++                    }
++                }
++                let error = fixture.unchanged_error(
++                    &fixture.intent.target_participant_lease_token_ref,
++                    Some(&fixture.context(false)),
++                );
++                assert!(
++                    matches!(
++                        error,
++                        ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry { .. }
++                            | ReadOnlyAuthoritySnapshotErrorV1::UnsafeFileMetadata { .. }
++                    ),
++                    "unsafe material case {case}: {error:?}"
++                );
++            }
++        }
++        let fixture = Fixture::published(false);
++        let path = fixture
++            .object_path(&fixture.intent.descriptor_ref)
++            .parent()
++            .unwrap()
++            .to_owned();
++        let held = path.with_file_name("held-version");
++        fs::rename(&path, &held).unwrap();
++        symlink(&held, &path).unwrap();
++        assert!(matches!(
++            fixture.unchanged_error(&fixture.intent.descriptor_ref, None),
++            ReadOnlyAuthoritySnapshotErrorV1::UnsafeNamespaceEntry { .. }
++        ));
++    }
++
++    #[test]
++    fn test_pending_transaction_refuses_before_callback_without_repair() {
++        let fixture = Fixture::published(false);
++        let name = TempNameV1::Root {
++            root_revision: fixture.frozen.root_revision() + 1,
++            nonce: "ab".repeat(16),
++        }
++        .file_name();
++        let path = fixture.home.path().join("authority-v1/tmp").join(&name);
++        fs::write(&path, b"pending replacement").unwrap();
++        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
++        let before = tree(fixture.home.path());
++        let error =
++            with_existing_typed_object_snapshot_opened(&fixture.opened, |_| -> Result<(), _> {
++                panic!("pending transaction must not invoke reader")
++            })
++            .unwrap_err();
++        assert_eq!(
++            error,
++            ReadOnlyAuthoritySnapshotErrorV1::AuthorityTemporaryMaterialPresent { name }
++        );
++        assert!(before == tree(fixture.home.path()));
++    }
++
++    #[test]
++    fn test_success_and_error_exits_revalidate_captured_files_and_bindings() {
++        for callback_error in [false, true] {
++            for case in 0..7 {
++                let fixture = Fixture::published(false);
++                let object_path =
++                    fixture.object_path(&fixture.intent.target_participant_lease_token_ref);
++                let key_path = fixture.key_path();
++                let before = tree(fixture.home.path());
++                let expected_after = std::rc::Rc::new(std::cell::RefCell::new(None));
++                let changed = expected_after.clone();
++                let home = fixture.home.path().to_owned();
++                set_e2_rm_before_final_verify_hook(move || {
++                    match case {
++                        0 => {
++                            let bytes = fs::read(&object_path).unwrap();
++                            fs::rename(&object_path, object_path.with_extension("held")).unwrap();
++                            fs::write(&object_path, bytes).unwrap();
++                            fs::set_permissions(&object_path, fs::Permissions::from_mode(0o600))
++                                .unwrap();
++                        }
++                        1 => {
++                            let bytes = fs::read(&key_path).unwrap();
++                            fs::rename(&key_path, key_path.with_extension("held")).unwrap();
++                            fs::write(&key_path, bytes).unwrap();
++                            fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600))
++                                .unwrap();
++                        }
++                        2 => {
++                            let directory = object_path.parent().unwrap();
++                            let held = directory.with_file_name("held-version");
++                            fs::rename(directory, &held).unwrap();
++                            fs::create_dir(directory).unwrap();
++                            fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
++                                .unwrap();
++                            fs::copy(held.join(object_path.file_name().unwrap()), &object_path)
++                                .unwrap();
++                        }
++                        3 => {
++                            let mut bytes = fs::read(&object_path).unwrap();
++                            bytes[0] ^= 1;
++                            fs::write(&object_path, bytes).unwrap();
++                        }
++                        4 => {
++                            let mut bytes = fs::read(&key_path).unwrap();
++                            let last = bytes.len() - 1;
++                            bytes[last] ^= 1;
++                            fs::write(&key_path, bytes).unwrap();
++                        }
++                        5 => {
++                            let directory = key_path.parent().unwrap();
++                            let held = directory.with_file_name("held-keys");
++                            fs::rename(directory, &held).unwrap();
++                            fs::create_dir(directory).unwrap();
++                            fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
++                                .unwrap();
++                            fs::copy(held.join(key_path.file_name().unwrap()), &key_path).unwrap();
++                        }
++                        _ => {
++                            let directory = home.join("authority-v1/objects");
++                            let held = directory.with_file_name("held-objects");
++                            fs::rename(&directory, &held).unwrap();
++                            fs::create_dir(&directory).unwrap();
++                            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
++                                .unwrap();
++                        }
++                    }
++                    *changed.borrow_mut() = Some(tree(&home));
++                });
++                let mut context = fixture.context(false);
++                if callback_error {
++                    context.run_id.push_str("-wrong");
++                }
++                let error = fixture
++                    .read(
++                        &fixture.intent.target_participant_lease_token_ref,
++                        Some(&context),
++                    )
++                    .unwrap_err();
++                assert!(
++                    matches!(
++                        error,
++                        ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
++                            | ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged { .. }
++                    ),
++                    "exit case {case}: {error:?}"
++                );
++                let after = tree(fixture.home.path());
++                assert!(before != after, "attack must change captured material");
++                assert!(
++                    expected_after.borrow().as_ref().unwrap() == &after,
++                    "reader changed attack state"
++                );
++            }
++        }
++    }
++
++    #[test]
++    fn test_missing_file_error_retains_namespace_and_error_exit_precedence() {
++        for is_key in [false, true] {
++            let fixture = Fixture::published(false);
++            let reference = &fixture.intent.target_participant_lease_token_ref;
++            let path = if is_key {
++                fixture.key_path()
++            } else {
++                fixture.object_path(reference)
++            };
++            let bytes = fs::read(&path).unwrap();
++            fs::remove_file(&path).unwrap();
++            // Establish the actual missing-file failure before arranging substitution.
++            let expected = if is_key {
++                "sensitive object key file is absent"
++            } else {
++                "typed object file is absent"
++            };
++            assert_eq!(
++                fixture.unchanged_error(reference, Some(&fixture.context(false))),
++                io(expected)
++            );
++            let after_attack = std::rc::Rc::new(std::cell::RefCell::new(None));
++            let changed = after_attack.clone();
++            let home = fixture.home.path().to_owned();
++            set_e2_rm_before_final_verify_hook(move || {
++                fs::write(&path, bytes).unwrap();
++                fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
++                *changed.borrow_mut() = Some(tree(&home));
++            });
++            let error = fixture
++                .read(reference, Some(&fixture.context(false)))
++                .unwrap_err();
++            assert!(matches!(
++                error,
++                ReadOnlyAuthoritySnapshotErrorV1::NamespaceChanged { .. }
++                    | ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
++            ));
++            assert!(after_attack.borrow().as_ref().unwrap() == &tree(fixture.home.path()));
++        }
++    }
++
++    #[test]
++    fn test_verification_only_keys_read_existing_objects_and_missing_retired_keys_refuse() {
++        for missing in [false, true] {
++            let mut fixture = Fixture::published(false);
++            let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } =
++                &fixture.intent.target_participant_lease_token_ref.commitment
++            else {
++                panic!("HMAC fixture")
++            };
++            let old_key_id = key_id.clone();
++            fixture.frozen = platform::rotate_commitment_key_versioned_test(
++                fixture.home.path(),
++                material(0x9a),
++                None,
++            )
++            .unwrap();
++            assert_eq!(
++                fixture.frozen.commitment_key_registry()[&old_key_id].state,
++                AuthorityStoreCommitmentKeyStateV1::VerificationOnly
++            );
++            let before = tree(fixture.home.path());
++            assert!(
++                fixture
++                    .read(
++                        &fixture.intent.target_participant_lease_token_ref,
++                        Some(&fixture.context(false))
++                    )
++                    .unwrap()
++                    == b"snapshot-lease"
++            );
++            assert!(before == tree(fixture.home.path()));
++            fixture.mutate_root(|root| {
++                if missing {
++                    root.commitment_key_registry.remove(&old_key_id);
++                } else {
++                    root.commitment_key_registry
++                        .get_mut(&old_key_id)
++                        .unwrap()
++                        .state = AuthorityStoreCommitmentKeyStateV1::Retired;
++                }
++            });
++            let expected = if missing {
++                // Removing the initial registry key also breaks the production
++                // greenfield certificate; this refuses before any object read.
++                ReadOnlyAuthoritySnapshotErrorV1::AuthorityRootEncodingInvalid
++            } else {
++                io("sensitive object key is unavailable")
++            };
++            assert_eq!(
++                fixture.unchanged_error(
++                    &fixture.intent.target_participant_lease_token_ref,
++                    Some(&fixture.context(false))
++                ),
++                expected,
++                "missing registry key: {missing}"
++            );
++        }
++        // A caller-supplied reference naming an unregistered key reaches the
++        // new reader on a structurally valid production root.
++        let fixture = Fixture::published(false);
++        let mut reference = fixture.intent.target_participant_lease_token_ref.clone();
++        let AuthorityObjectCommitmentV1::StoreHmacSha256 { key_id, .. } = &mut reference.commitment
++        else {
++            unreachable!()
++        };
++        *key_id = "ak_00000000000000000000000000000000".into();
++        assert_eq!(
++            fixture.unchanged_error(&reference, Some(&fixture.context(false))),
++            io("sensitive object key is unavailable")
++        );
++    }
++
++    #[test]
++    fn test_v1_frozen_roots_are_refused_without_upgrade_or_initialization() {
++        let home = root();
++        let authority = HostSessionAuthority::open(home.path()).unwrap();
++        let initial = authority.bootstrap().unwrap();
++        let opened = TrustedAuthorityRoot::open(home.path()).unwrap();
++        let before = tree(home.path());
++        let reference = placeholder_ref(
++            "ao_00000000000000000000000000000000",
++            AuthorityObjectKindV1::Policy,
++        );
++        let error = with_existing_typed_object_snapshot_opened(&opened, |snapshot| {
++            snapshot.read_typed_object(
++                &initial.authority_store_id,
++                initial.root_revision,
++                &reference,
++                None,
++            )
++        })
++        .unwrap_err();
++        assert_eq!(
++            error,
++            io("typed object snapshot requires StateRootV2 or StateRootV3")
++        );
++        assert!(before == tree(home.path()));
++    }
++
++    #[test]
++    fn test_production_terminal_transport_is_not_present_and_is_not_repaired() {
++        use crate::execution::agent_runtime::host_session_authority::{
++            schema::{HostStartupOwnershipProtocolActorV1, HostStartupOwnershipProtocolEventV1},
++            transition::{
++                ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
++                ResolveStartupOwnershipRequestV1, TransitionClaimOutcomeV1,
++            },
++        };
++        let mut fixture = Fixture::published(false);
++        let authority = HostSessionAuthority::open(fixture.home.path()).unwrap();
++        let claim = ClaimHostSessionTransitionRequestV1 {
++            intent_id: fixture.intent.intent_id.clone(),
++            issuer_request_id: fixture.intent.issuer_request_id.clone(),
++            payload_commitment: fixture.intent.payload_commitment.clone(),
++            expected_intent_revision: fixture.intent.intent_revision,
++            claim_id: "snapshot-claim".into(),
++            claimant_attempt_id: "snapshot-attempt".into(),
++        };
++        let TransitionClaimOutcomeV1::Claimed(claimed) = authority
++            .claim_start_at(
++                &claim,
++                TimestampV1::parse("2026-10-27T12:01:00.000000000Z").unwrap(),
++                30,
++            )
++            .unwrap()
++        else {
++            panic!("production claim must publish")
++        };
++        let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } = claimed.state
++        else {
++            unreachable!()
++        };
++        authority
++            .apply_start_at(
++                &ApplyHostSessionTransitionRequestV1 {
++                    intent_id: claimed.intent_id.clone(),
++                    issuer_request_id: claimed.issuer_request_id.clone(),
++                    payload_commitment: claimed.payload_commitment.clone(),
++                    expected_intent_revision: claimed.intent_revision,
++                    claim_id: claim.claim_id.clone(),
++                    expected_claim_revision: claim_revision,
++                },
++                TimestampV1::parse("2026-10-27T12:01:10.000000000Z").unwrap(),
++            )
++            .unwrap();
++        // Publish actual terminal startup truth through the production protocol;
++        // no runtime process is created by these authority publication methods.
++        authority
++            .resolve_startup_ownership_at(
++                &ResolveStartupOwnershipRequestV1 {
++                    intent_id: claimed.intent_id,
++                    issuer_request_id: claimed.issuer_request_id,
++                    payload_commitment: claimed.payload_commitment,
++                    protocol_actor:
++                        HostStartupOwnershipProtocolActorV1::LaunchApplicationClaimant {
++                            claim_id: claim.claim_id,
++                            claimant_attempt_id: claim.claimant_attempt_id,
++                        },
++                    protocol_event: HostStartupOwnershipProtocolEventV1::RuntimeCreationRejected {
++                        rejection_id: "snapshot-runtime-rejected".into(),
++                    },
++                    observed_at: TimestampV1::parse("2026-10-27T12:01:20.000000000Z").unwrap(),
++                },
++                TimestampV1::parse("2026-10-27T12:01:21.000000000Z").unwrap(),
++            )
++            .unwrap();
++        fixture.frozen = read_opened_root_v2_or_v3(&fixture.opened).unwrap();
++        // Production startup publication upgrades the retained Start root to V3.
++        let VersionedStateRoot::V3(root) = &fixture.frozen else {
++            unreachable!()
++        };
++        assert_ne!(
++            root.object_index[&fixture.intent.transport_payload_ref.ref_id].storage_state,
++            AuthorityObjectStorageStateV1::Present
++        );
++        assert_eq!(
++            fixture.unchanged_error(
++                &fixture.intent.transport_payload_ref,
++                Some(&fixture.context(true))
++            ),
++            io("typed object has no exact present index entry")
++        );
++    }
++
++    #[test]
++    fn test_noncanonical_json_and_cross_store_hmac_are_rejected_after_capture() {
++        use crate::execution::agent_runtime::host_session_authority::hash::{
++            store_hmac_sha256, SensitiveDomainV1,
++        };
++        let fixture = Fixture::published(false);
++        let mut reference = fixture.intent.target_participant_lease_token_ref.clone();
++        let envelope =
++            AuthorityStoreCommitmentKeyFileV1::decode(&fs::read(fixture.key_path()).unwrap())
++                .unwrap();
++        let AuthorityObjectCommitmentV1::StoreHmacSha256 { digest_hex, .. } =
++            &mut reference.commitment
++        else {
++            unreachable!()
++        };
++        *digest_hex = store_hmac_sha256(
++            &envelope.secret_key,
++            SensitiveDomainV1::ParticipantLeaseToken,
++            "as_00000000000000000000000000000000",
++            &fixture.intent.intent_id,
++            Some(&fixture.intent.run_id),
++            b"snapshot-lease",
++        )
++        .unwrap();
++        assert_eq!(
++            fixture.unchanged_error(&reference, Some(&fixture.context(false))),
++            io("sensitive object commitment mismatch")
++        );
++        let path = fixture.object_path(&fixture.intent.descriptor_ref);
++        let original = fs::read(&path).unwrap();
++        let value: serde_json::Value = serde_json::from_slice(&original).unwrap();
++        let fields = value
++            .as_object()
++            .unwrap()
++            .iter()
++            .rev()
++            .map(|(key, value)| {
++                format!(
++                    "{}:{}",
++                    serde_json::to_string(key).unwrap(),
++                    serde_json::to_string(value).unwrap()
++                )
++            })
++            .collect::<Vec<_>>()
++            .join(",");
++        let noncanonical = format!("{{{fields}}}").into_bytes();
++        assert_eq!(original.len(), noncanonical.len());
++        assert!(original != noncanonical);
++        fs::write(path, noncanonical).unwrap();
++        assert_eq!(
++            fixture.unchanged_error(&fixture.intent.descriptor_ref, None),
++            io("canonical object bytes are invalid")
++        );
++    }
++
++    mod schema_binding {
++        use super::*;
++        use crate::execution::agent_runtime::host_session_authority::{
++            schema::{
++                ResumeHandleHashInputV1, StartContinuationHandleHashInputV2,
++                StartContinuationHandleStateV2,
++            },
++            validation::CanonicalHashInputV1,
++        };
++
++        fn object<T: serde::Serialize + CanonicalHashInputV1>(
++            kind: AuthorityObjectKindV1,
++            schema_version: u32,
++            id: u8,
++            value: &T,
++        ) -> (AuthorityObjectRefV1, Vec<u8>) {
++            (
++                AuthorityObjectRefV1 {
++                    ref_id: format!("ao_{}", format!("{id:02x}").repeat(16)),
++                    object_kind: kind,
++                    schema_version,
++                    commitment: AuthorityObjectCommitmentV1::CanonicalSha256 {
++                        digest_hex: canonical_sha256(value).unwrap(),
++                    },
++                },
++                canonical_json::to_vec(value).unwrap(),
++            )
++        }
++
++        // Existing Start expiry and Start-continuation protocols publish the
++        // positive schema1 terminal and schema2 resume objects, respectively.
++        fn published(v3: bool) -> (Fixture, Vec<AuthorityObjectRefV1>) {
++            use crate::execution::agent_runtime::host_session_authority::transition::{
++                ApplyHostSessionTransitionRequestV1, ClaimHostSessionTransitionRequestV1,
++                ExpireHostSessionTransitionRequestV1, TransitionClaimOutcomeV1,
++            };
++            let mut fixture = Fixture::published(false);
++            let authority = HostSessionAuthority::open(fixture.home.path()).unwrap();
++            let mut continuation_ref = None;
++            if v3 {
++                let claim = ClaimHostSessionTransitionRequestV1 {
++                    intent_id: fixture.intent.intent_id.clone(),
++                    issuer_request_id: fixture.intent.issuer_request_id.clone(),
++                    payload_commitment: fixture.intent.payload_commitment.clone(),
++                    expected_intent_revision: fixture.intent.intent_revision,
++                    claim_id: "snapshot-claim".into(),
++                    claimant_attempt_id: "snapshot-attempt".into(),
++                };
++                let TransitionClaimOutcomeV1::Claimed(claimed) = authority
++                    .claim_start_at(
++                        &claim,
++                        TimestampV1::parse("2026-10-27T12:01:00.000000000Z").unwrap(),
++                        30,
++                    )
++                    .unwrap()
++                else {
++                    panic!("production claim must publish")
++                };
++                let HostSessionTransitionIntentStateV2::Claimed { claim_revision, .. } =
++                    claimed.state
++                else {
++                    unreachable!()
++                };
++                authority
++                    .apply_start_at(
++                        &ApplyHostSessionTransitionRequestV1 {
++                            intent_id: claimed.intent_id.clone(),
++                            issuer_request_id: claimed.issuer_request_id.clone(),
++                            payload_commitment: claimed.payload_commitment.clone(),
++                            expected_intent_revision: claimed.intent_revision,
++                            claim_id: claim.claim_id.clone(),
++                            expected_claim_revision: claim_revision,
++                        },
++                        TimestampV1::parse("2026-10-27T12:01:10.000000000Z").unwrap(),
++                    )
++                    .unwrap();
++                let root = authority.read_a12a_root().unwrap();
++                continuation_ref = Some(publish_continuation(
++                    &authority,
++                    &root.transition_intent_map[&fixture.intent.intent_id],
++                ));
++            } else {
++                authority
++                    .expire_start_at(
++                        &ExpireHostSessionTransitionRequestV1 {
++                            intent_id: fixture.intent.intent_id.clone(),
++                            issuer_request_id: fixture.intent.issuer_request_id.clone(),
++                            payload_commitment: fixture.intent.payload_commitment.clone(),
++                            expected_intent_revision: fixture.intent.intent_revision,
++                        },
++                        TimestampV1::parse("2026-10-27T12:05:01.000000000Z").unwrap(),
++                    )
++                    .unwrap();
++            }
++            fixture.frozen = read_opened_root_v2_or_v3(&fixture.opened).unwrap();
++            let intents = match &fixture.frozen {
++                VersionedStateRoot::V2(root) => &root.transition_intent_map,
++                VersionedStateRoot::V3(root) => &root.transition_intent_map,
++                _ => unreachable!(),
++            };
++            let intent = &intents[&fixture.intent.intent_id];
++            let reference = if let Some(reference) = continuation_ref {
++                reference
++            } else {
++                match &intent.state {
++                    HostSessionTransitionIntentStateV2::Expired {
++                        terminal_handoff_ref,
++                        ..
++                    } => terminal_handoff_ref.clone(),
++                    _ => match &intent.transport_payload_state {
++                        HostSessionTransitionTransportPayloadStateV1::ReleaseEligible {
++                            terminal_handoff_ref,
++                        }
++                        | HostSessionTransitionTransportPayloadStateV1::Released {
++                            terminal_handoff_ref,
++                            ..
++                        } => terminal_handoff_ref.clone(),
++                        _ => panic!("production terminal publication must retain its reference"),
++                    },
++                }
++            };
++            assert_eq!(reference.schema_version, if v3 { 2 } else { 1 });
++            (fixture, vec![reference])
++        }
++
++        // Adapted from transition_tests::prepare_start_continuity_transaction.
++        // All registration/root/object state is published and validated by production APIs.
++        fn publish_continuation(
++            authority: &HostSessionAuthority,
++            intent: &HostSessionTransitionIntentV2,
++        ) -> AuthorityObjectRefV1 {
++            use crate::execution::agent_runtime::host_session_authority::{
++                start_continuity::{
++                    EstablishStartContinuationRequestV1, StartContinuationOutcomeV1,
++                    StartTransactionBeginOutcomeV1,
++                },
++                store_schema::{StartTransactionRecordV1, StartTransactionStateV1},
++            };
++            fn timestamp(value: &str) -> TimestampV1 {
++                TimestampV1::parse(value).unwrap()
++            }
++            let HostSessionTransitionIntentStateV2::Applied {
++                application_result_ref,
++                authority_revision_after,
++                ..
++            } = &intent.state
++            else {
++                panic!("Start must remain applied")
++            };
++            let root = authority.read_a12a_root().unwrap();
++            let registration = EstablishStartContinuationRequestV1 {
++                start_transaction_id: "stx_start_1".into(),
++                request_key_sha256: "c".repeat(64),
++                authority_store_id: root.authority_store_id,
++                orchestration_session_id: intent.orchestration_session_id.clone(),
++                intent_id: intent.intent_id.clone(),
++                issuer_request_id: intent.issuer_request_id.clone(),
++                payload_commitment: intent.payload_commitment.clone(),
++                application_result_ref: application_result_ref.clone(),
++                run_id: intent.run_id.clone(),
++                expected_authority_revision: *authority_revision_after,
++                authoritative_participant_id: intent.target_authoritative_participant_id.clone(),
++                backend_id: "cli:codex".into(),
++                protocol: "substrate.agent.session".into(),
++                exchange_id: "exchange-start-1".into(),
++                exchange_sequence: 1,
++                provider_event_kind: "turn.exchange_opened".into(),
++                exchange_evidence_sha256: "a".repeat(64),
++                internal_uaa_session_id: "uaa-session-start-1".into(),
++                observed_at: timestamp("2026-10-27T12:01:20.000000000Z"),
++            };
++            let transaction = StartTransactionRecordV1 {
++                schema_version: 1,
++                transaction_id: registration.start_transaction_id.clone(),
++                request_key_sha256: registration.request_key_sha256.clone(),
++                prompt_sha256: "d".repeat(64),
++                authority_store_id: registration.authority_store_id.clone(),
++                orchestration_session_id: registration.orchestration_session_id.clone(),
++                shell_trace_session_id: intent.shell_trace_session_id.clone(),
++                authoritative_participant_id: registration.authoritative_participant_id.clone(),
++                backend_id: registration.backend_id.clone(),
++                protocol: registration.protocol.clone(),
++                workspace_root: intent
++                    .workspace_binding
++                    .workspace_root
++                    .physical_path
++                    .clone(),
++                world_id: intent
++                    .world_binding
++                    .as_ref()
++                    .map(|binding| binding.world_id.clone()),
++                world_generation: intent
++                    .world_binding
++                    .as_ref()
++                    .map(|binding| binding.world_generation),
++                public_backend_id: registration.backend_id.clone(),
++                public_scope: if intent.world_binding.is_some() {
++                    "world".into()
++                } else {
++                    "host".into()
++                },
++                start_intent_id: registration.intent_id.clone(),
++                start_issuer_request_id: registration.issuer_request_id.clone(),
++                start_payload_commitment: registration.payload_commitment.clone(),
++                start_application_result_ref: registration.application_result_ref.clone(),
++                start_run_id: registration.run_id.clone(),
++                start_authority_revision: registration.expected_authority_revision,
++                created_at: timestamp("2026-10-27T12:01:10.000000000Z"),
++                updated_at: timestamp("2026-10-27T12:01:10.000000000Z"),
++                state: StartTransactionStateV1::PromptNotSubmitted,
++            };
++            assert!(matches!(
++                authority.begin_start_transaction(&transaction).unwrap(),
++                StartTransactionBeginOutcomeV1::Applied(_)
++            ));
++            authority
++                .mark_start_prompt_submission_no_replay_barrier(
++                    &registration.start_transaction_id,
++                    &registration.request_key_sha256,
++                    timestamp("2026-10-27T12:01:15.000000000Z"),
++                )
++                .unwrap();
++            match authority
++                .establish_start_continuation(&registration)
++                .unwrap()
++            {
++                StartContinuationOutcomeV1::Applied(value) => value.resume_handle_ref,
++                _ => panic!("production continuation must publish"),
++            }
++        }
++
++        // Resume objects are validated and published by the real canonical orphan
++        // publisher. They become indexed only as an explicitly adverse root fault.
++        fn adverse(position: usize) -> (Fixture, AuthorityObjectRefV1) {
++            if position >= 2 {
++                let (mut fixture, references) = published(false);
++                if let VersionedStateRoot::V2(root) = &fixture.frozen {
++                    fixture.frozen = VersionedStateRoot::V3(
++                        upgrade_v2_root_to_v3_exact_current_opened(
++                            &fixture.opened,
++                            root,
++                            || Ok(()),
++                        )
++                        .unwrap(),
++                    );
++                }
++                if position == 3 {
++                    use crate::execution::agent_runtime::host_session_authority::schema::{
++                        TerminalHandoffHashInputV1, TerminalHandoffHashInputV2,
++                    };
++                    let old: TerminalHandoffHashInputV1 = canonical_json::from_slice(
++                        &fs::read(path(&fixture, &references[0])).unwrap(),
++                    )
++                    .unwrap();
++                    let value = TerminalHandoffHashInputV2 {
++                        schema_version: 2,
++                        intent_id: old.intent_id,
++                        run_id: old.run_id,
++                        payload_commitment: old.payload_commitment,
++                        terminal_state: old.terminal_state,
++                        application_result_ref: old.application_result_ref,
++                        input_acceptance_ref: old.input_acceptance_ref,
++                        startup_ownership_result_ref: None,
++                        post_turn_completion_ref: old.post_turn_completion_ref,
++                        post_turn_application_result_ref: old.post_turn_application_result_ref,
++                        recorded_at: old.recorded_at,
++                    };
++                    let (reference, bytes) =
++                        object(AuthorityObjectKindV1::TerminalHandoff, 2, 0x93, &value);
++                    prepare_typed_object_v3_opened(
++                        &fixture.opened,
++                        fixture.frozen.root_revision(),
++                        &reference,
++                        &bytes,
++                        None,
++                    )
++                    .unwrap();
++                    return (fixture, reference);
++                }
++                return (fixture, references[0].clone());
++            }
++            let fixture = Fixture::published(true);
++            let resume = ResumeHandleHashInputV1 {
++                schema_version: 1,
++                orchestration_session_id: fixture.intent.orchestration_session_id.clone(),
++                participant_id: fixture.intent.target_authoritative_participant_id.clone(),
++                backend_id: "cli:codex".into(),
++                protocol: "substrate.agent.session".into(),
++                internal_uaa_session_id: "schema-binding-session".into(),
++            };
++            let resume_v2 = StartContinuationHandleHashInputV2 {
++                schema_version: 2,
++                authority_store_id: fixture.frozen.authority_store_id().into(),
++                orchestration_session_id: resume.orchestration_session_id.clone(),
++                participant_id: resume.participant_id.clone(),
++                backend_id: resume.backend_id.clone(),
++                protocol: resume.protocol.clone(),
++                internal_uaa_session_id: resume.internal_uaa_session_id.clone(),
++                start_intent_id: fixture.intent.intent_id.clone(),
++                start_issuer_request_id: fixture.intent.issuer_request_id.clone(),
++                start_payload_commitment: fixture.intent.payload_commitment.clone(),
++                start_application_result_ref: placeholder_ref(
++                    "ao_96969696969696969696969696969696",
++                    AuthorityObjectKindV1::ApplicationResult,
++                ),
++                start_run_id: fixture.intent.run_id.clone(),
++                authority_revision_before: 1,
++                authority_record_commitment_before: fixture.intent.payload_commitment.clone(),
++                authority_revision_after: 2,
++                state: StartContinuationHandleStateV2::Registered {
++                    exchange_id: "schema-binding-exchange".into(),
++                    exchange_sequence: 1,
++                    provider_event_kind: "thread.started".into(),
++                    evidence_sha256: "ab".repeat(32),
++                    observed_at: TimestampV1::parse("2026-10-27T12:05:00.000000000Z").unwrap(),
++                },
++            };
++            let (reference, bytes) = if position == 0 {
++                object(AuthorityObjectKindV1::ResumeHandle, 1, 0x91, &resume)
++            } else {
++                object(AuthorityObjectKindV1::ResumeHandle, 2, 0x92, &resume_v2)
++            };
++            prepare_typed_object_v3_opened(
++                &fixture.opened,
++                fixture.frozen.root_revision(),
++                &reference,
++                &bytes,
++                None,
++            )
++            .unwrap();
++            (fixture, reference)
++        }
++
++        fn path(fixture: &Fixture, reference: &AuthorityObjectRefV1) -> std::path::PathBuf {
++            fixture
++                .home
++                .path()
++                .join("authority-v1/objects")
++                .join(match reference.object_kind {
++                    AuthorityObjectKindV1::ResumeHandle => "resume-handle",
++                    AuthorityObjectKindV1::TerminalHandoff => "terminal-handoff",
++                    _ => unreachable!(),
++                })
++                .join(format!("v{}", reference.schema_version))
++                .join(format!("{}.obj", reference.ref_id))
++        }
++
++        #[test]
++        fn test_schema_1_and_2_production_published_objects_read_in_v2_and_v3() {
++            for v3 in [false, true] {
++                let (fixture, references) = published(v3);
++                let before = tree(fixture.home.path());
++                for reference in references {
++                    assert_eq!(
++                        fixture.read(&reference, None).unwrap(),
++                        fs::read(path(&fixture, &reference)).unwrap()
++                    );
++                }
++                assert!(before == tree(fixture.home.path()));
++            }
++        }
++
++        #[test]
++        fn test_cross_schema_payloads_refuse_even_with_matching_digest_index_and_length() {
++            for position in [1, 0, 3, 2] {
++                let (fixture, original) = adverse(position);
++                let bytes = fs::read(path(&fixture, &original)).unwrap();
++                let mut wrong = original.clone();
++                wrong.ref_id = "ao_95959595959595959595959595959595".into();
++                wrong.schema_version = 3 - original.schema_version;
++                let wrong_path = path(&fixture, &wrong);
++                fs::create_dir_all(wrong_path.parent().unwrap()).unwrap();
++                fs::set_permissions(
++                    wrong_path.parent().unwrap(),
++                    fs::Permissions::from_mode(0o700),
++                )
++                .unwrap();
++                fs::write(&wrong_path, &bytes).unwrap();
++                fs::set_permissions(&wrong_path, fs::Permissions::from_mode(0o600)).unwrap();
++                // Negative-only extra index entry: the digest still authenticates
++                // the unchanged production-published bytes under the wrong schema.
++                let mut root = fixture.frozen.clone();
++                let index = match &mut root {
++                    VersionedStateRoot::V2(root) => &mut root.object_index,
++                    VersionedStateRoot::V3(root) => &mut root.object_index,
++                    _ => unreachable!(),
++                };
++                index.insert(
++                    wrong.ref_id.clone(),
++                    AuthorityObjectIndexEntryV1 {
++                        schema_version: 1,
++                        ref_id: wrong.ref_id.clone(),
++                        object_kind: wrong.object_kind,
++                        object_schema_version: wrong.schema_version,
++                        byte_length: bytes.len() as u64,
++                        storage_state: AuthorityObjectStorageStateV1::Present,
++                    },
++                );
++                fs::write(
++                    fixture.home.path().join("authority-v1/state-root-v1.json"),
++                    root.to_canonical_bytes().unwrap(),
++                )
++                .unwrap();
++                assert_eq!(
++                    fixture.unchanged_error(&wrong, None),
++                    io("canonical object schema version mismatch")
++                );
++            }
++        }
++        #[test]
++        fn test_absent_or_conflicting_schema_retains_guard_and_final_error_precedence() {
++            for schema in [
++                None,
++                Some(serde_json::json!(2)),
++                Some(serde_json::json!("1")),
++            ] {
++                let fixture = Fixture::published(false);
++                let reference = &fixture.intent.descriptor_ref;
++                let path = fixture.object_path(reference);
++                let mut value: serde_json::Value =
++                    serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++                let expected = if let Some(schema) = schema {
++                    let expected = if schema.is_number() {
++                        "canonical object schema version mismatch"
++                    } else {
++                        "canonical object schema version is absent"
++                    };
++                    value["schema_version"] = schema;
++                    io(expected)
++                } else {
++                    value.as_object_mut().unwrap().remove("schema_version");
++                    io("canonical object schema version is absent")
++                };
++                let bytes = canonical_json::to_vec(&value).unwrap();
++                fs::write(&path, &bytes).unwrap();
++                fixture.mutate_root(|root| {
++                    root.object_index
++                        .get_mut(&reference.ref_id)
++                        .unwrap()
++                        .byte_length = bytes.len() as u64
++                });
++                assert_eq!(fixture.unchanged_error(reference, None), expected);
++                let mut attack_state = None;
++                let error =
++                    with_existing_typed_object_snapshot_opened(&fixture.opened, |snapshot| {
++                        let error = snapshot
++                            .read_typed_object(
++                                fixture.frozen.authority_store_id(),
++                                fixture.frozen.root_revision(),
++                                reference,
++                                None,
++                            )
++                            .unwrap_err();
++                        assert_eq!(error, expected);
++                        fs::write(&path, b"changed after schema failure").unwrap();
++                        attack_state = Some(tree(fixture.home.path()));
++                        Err::<Vec<u8>, _>(error)
++                    })
++                    .unwrap_err();
++                assert!(matches!(
++                    error,
++                    ReadOnlyAuthoritySnapshotErrorV1::SnapshotEntryChanged { .. }
++                ));
++                assert!(attack_state.unwrap() == tree(fixture.home.path()));
++            }
++        }
++    }
++}

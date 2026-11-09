@@ -1,0 +1,173 @@
+{
+  "status": "local draft; no review or publication",
+  "repository": "https://github.com/atomize-hq/substrate",
+  "rows": [
+    {
+      "label": "t13",
+      "head": "33ebdf0d6a277f45dbc5603063bbcdbe521252ce",
+      "already_fetched_containing_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "patch": {
+        "file": "task03-t13.patch",
+        "original_sha256": "9e558718b5f8347200acd952822aafbae11defdaf29f7f7a690674ff985261af",
+        "published_candidate_sha256": "9e558718b5f8347200acd952822aafbae11defdaf29f7f7a690674ff985261af",
+        "mode": "100644"
+      },
+      "files": [
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/facade.rs",
+          "sha256": "046e0e97bb541e1a7478d94e5b83f7ac0d604ea430b285c72a2cba76dad61ae8",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store.rs",
+          "sha256": "2324ed1a5f7fb6524d0e198c0b36289cc9d32d03c35d1b70d66c09c824ace5df",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs",
+          "sha256": "3a755074cda4808e03baba9f5886f948491fd1b17973d9669c9ac8e00e3b53ac",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+          "sha256": "e428f872ffe6266f97fc56652f7c10d2266535baf59893864db4daf559a25e69",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs",
+          "sha256": "e038a2f40933205559e591039b444b2931ea38fbc937f22baf6e5b6d19f228d4",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/transition.rs",
+          "sha256": "543b2ae7970c56fff77a2bfecc2f6bcdc60138486a00300fa9391e708c54eb1a",
+          "mode": "0644"
+        }
+      ],
+      "source_status": "tracked modifications; empty stage",
+      "toolchain": "1.89.0",
+      "build_recipe": "cargo +1.89.0 build --workspace --locked --target x86_64-unknown-linux-gnu",
+      "lockfile_sha256": "f65d2e6ddf5790177463c0e67d8d1846ab25930f15fd2dcae97277334124c2fe",
+      "toolchain_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+    },
+    {
+      "label": "t11",
+      "head": "33ebdf0d6a277f45dbc5603063bbcdbe521252ce",
+      "already_fetched_containing_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "patch": {
+        "file": "task03-t11.patch",
+        "original_sha256": "4faad4a774f27a19031bfe45cec95cd40aaad4fb1fe56b23620ebd6796bf9623",
+        "published_candidate_sha256": "4faad4a774f27a19031bfe45cec95cd40aaad4fb1fe56b23620ebd6796bf9623",
+        "mode": "100644"
+      },
+      "files": [
+        {
+          "path": "crates/shell/src/builtins/world_gateway.rs",
+          "sha256": "63970f647cb6cb2950322b5fe2bdc92e2855acbd6cfc2399c8fb1b9a316b49af",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/control.rs",
+          "sha256": "fb76d537bd072096c3600d127149e064900259da95aa1311e118a1728c2767ee",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agents_cmd.rs",
+          "sha256": "a4f953de3b76cc3ccc36af806f19ee9295f6618ea56626d0f0a531316b5783ea",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/cli.rs",
+          "sha256": "90426d37142aa626a7605196fe7e9b9872d1fc71e99b0e059500d494aaa9398a",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/prompt_fulfillment.rs",
+          "sha256": "5a61162a5eaf5f045f94ba0caf4f3a4d92ce9c89ced985034bd1da5aa1080bba",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/repl/async_repl.rs",
+          "sha256": "74e07e6f055d3f939126f3f3750156021e3417bb516207aceefa253073c2171f",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/transport-api-types/src/lib.rs",
+          "sha256": "eda3b1dcd68f77f66cc9a43bf6627f28630a5012fc158f77c5681c0b34ce8c8c",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/world-service/src/gateway_runtime.rs",
+          "sha256": "b63ee8c06c9b2417431cebb7c0fcc7aa8003d929b0e3b06544a5800892b4f243",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/world-service/src/service.rs",
+          "sha256": "e8c895a56353addc2514879c04ef173564102f5246d46559148c291b62a60057",
+          "mode": "0644"
+        },
+        {
+          "path": "docs/CONFIGURATION.md",
+          "sha256": "4fd26cd918d194cc529fd62aa8e93ca1039482f0bde95b6bd689e1b72364b388",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/native_launch_context.rs",
+          "sha256": "880185083e3f31bcda0858a34d2a6604d496ee95ea833439c7a15827169a7e3a",
+          "mode": "0644"
+        }
+      ],
+      "source_status": "tracked modifications plus one untracked source file; empty stage",
+      "toolchain": "1.89.0",
+      "build_recipe": "cargo +1.89.0 build --workspace --locked --target x86_64-unknown-linux-gnu",
+      "untracked": {
+        "payload": "task03-t11-native-launch-context.rs",
+        "path": "crates/shell/src/execution/agent_runtime/native_launch_context.rs",
+        "original_sha256": "880185083e3f31bcda0858a34d2a6604d496ee95ea833439c7a15827169a7e3a",
+        "published_candidate_sha256": "880185083e3f31bcda0858a34d2a6604d496ee95ea833439c7a15827169a7e3a",
+        "mode": "100644"
+      },
+      "lockfile_sha256": "f65d2e6ddf5790177463c0e67d8d1846ab25930f15fd2dcae97277334124c2fe",
+      "toolchain_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+    },
+    {
+      "label": "t10",
+      "head": "29cf8e8223c9d166263e56de219428d2b3858aa9",
+      "already_fetched_containing_ref": "refs/heads/feat/internal-host-orchestrator-world-dispatch-bootstrap",
+      "patch": {
+        "file": "task03-t10.patch",
+        "original_sha256": "2c48806842acbea289a17790a5f6ee50c776e74440795f70dad10fe9532a333a",
+        "published_candidate_sha256": "2c48806842acbea289a17790a5f6ee50c776e74440795f70dad10fe9532a333a",
+        "mode": "100644"
+      },
+      "files": [
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store.rs",
+          "sha256": "2324ed1a5f7fb6524d0e198c0b36289cc9d32d03c35d1b70d66c09c824ace5df",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/object_persistence.rs",
+          "sha256": "3a755074cda4808e03baba9f5886f948491fd1b17973d9669c9ac8e00e3b53ac",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store/platform/transaction.rs",
+          "sha256": "64e46794d233bc5fde115df86fb3acae8469ccf46c48ff3741dcb20e42de18e7",
+          "mode": "0644"
+        },
+        {
+          "path": "crates/shell/src/execution/agent_runtime/host_session_authority/store_tests.rs",
+          "sha256": "e038a2f40933205559e591039b444b2931ea38fbc937f22baf6e5b6d19f228d4",
+          "mode": "0644"
+        }
+      ],
+      "source_status": "tracked modifications; empty stage",
+      "toolchain": "1.89.0",
+      "build_recipe": "cargo +1.89.0 build --workspace --locked --target x86_64-unknown-linux-gnu",
+      "lockfile_sha256": "f65d2e6ddf5790177463c0e67d8d1846ab25930f15fd2dcae97277334124c2fe",
+      "toolchain_sha256": "8aa4ad836dc3e6479a7677e869fd3ad6a9314e5624d76b5e7f666fe7820b30c8"
+    }
+  ],
+  "limitations": "Exact source restoration does not establish historical compiler or native output identity. Local original custody is not off-host backup."
+}

@@ -1,0 +1,5 @@
+# Selected historical records
+
+These are scrubbed pointers to selected original local records, not copies of private sessions. Their original bytes remain in local private custody outside the proposed cache leaves; that custody is not an off-host backup. Task10's 11,036-byte historical final assessment has SHA256 `1c798068b4cde75fea0b230bf6997a1ff2e241ad9a73e35e34e1e0727b404343`; its historical instruction retained private build, index, source and proof. Task13's 3,948-byte historical final assessment has SHA256 `196680f0aef26260c0501bfb1f5e2a73ffaef749f23752c4234518ea26607010`; it reported an implementation review without qualifying P1/P2 findings and acceptance pending at that historical point. Neither statement establishes acceptance of the present preserved working trees. Task10's current patch differs from its earlier repair patch. A Task11 historical outcome associated with this exact source has not been established.
+
+The exact record paths, modes and additional original record hashes are held in the local private custody mapping. Retaining those original records and the source checkouts is a condition of the proposed cache actions.
