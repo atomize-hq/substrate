@@ -1,6 +1,6 @@
 # Recovery for two dirty historical worktrees
 
-This is a preservation candidate pending publication and verification. The manifest and patches reconstruct selected original source; their existence does not imply product acceptance or a successful build. Retrieve a containing branch with `git fetch --no-tags origin refs/heads/<branch>`, then check out the exact full commit detached in a new checkout.
+These two dirty worktrees were removed after the source package was published and verified at `930b836e8d60a6de628b991d7319cc14144cceac`. The [Tail28 receipt](cleanup-receipt-task03-tail28.json) records the actions and postchecks. The manifest and patches reconstruct selected original source; their existence does not imply product acceptance or a successful build. Retrieve a containing branch with `git fetch --no-tags origin refs/heads/<branch>`, then check out the exact full commit detached in a new checkout.
 
 | Label | Exact base | Containing branch | Tree | Patch | Cargo.lock SHA-256 |
 |---|---|---|---|---|---|
