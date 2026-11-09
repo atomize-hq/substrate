@@ -1,0 +1,102 @@
+diff --git a/scripts/ci/canonical_shell_wall_runner.py b/scripts/ci/canonical_shell_wall_runner.py
+index 9c6dcd1317499c5aefa6f5755ccca638de5df8ae..e4c738bf36d6e5dd318106df57f23ae6964005ef 100644
+--- a/scripts/ci/canonical_shell_wall_runner.py
++++ b/scripts/ci/canonical_shell_wall_runner.py
+@@ -11932,6 +11932,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
+         )
+         child_records.append((role, name, child_fd, child_identity))
+     snapshots = []
++    cargo_runtime: dict[str, object] | None = None
+     snapshot_records: list[
+         tuple[str, str, int, DirectoryIdentity]
+     ] = []
+@@ -11964,6 +11965,11 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
+     cleanup_timer_armed = False
+     cleanup_previous_handler: object | None = None
+ 
++    def persist_snapshot_setup() -> None:
++        provenance["mounts"]["snapshots"] = snapshots
++        provenance["mounts"]["cargo_home_runtime"] = cargo_runtime
++        rewrite_provenance()
++
+     def mark_stage_b_reaped() -> None:
+         nonlocal stage_b_reaped
+         stage_b_reaped = True
+@@ -12050,6 +12056,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
+                     gitdir_fd=stage_a_gitdir_fd,
+                 )
+             )
++            persist_snapshot_setup()
+         finally:
+             os.close(stage_a_gitdir_fd)
+         repository_fd, repository_identity = open_validated_directory(
+@@ -12073,6 +12080,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
+                 deadline=snapshot_deadline,
+             )
+         )
++        persist_snapshot_setup()
+         rustup_fd, rustup_identity = open_validated_directory(
+             child_paths["rustup-home-snapshot"],
+             expected_uid=os.getuid(),
+@@ -12095,6 +12103,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
+                 deadline=snapshot_deadline,
+             )
+         )
++        persist_snapshot_setup()
+         seed_fd, seed_identity = open_validated_directory(
+             child_paths["cargo-home-seed"],
+             expected_uid=os.getuid(),
+@@ -12114,6 +12123,7 @@ def stage_a_main(arguments: Mapping[str, object]) -> int:
+             child_paths["cargo-home-runtime"],
+             deadline=snapshot_deadline,
+         )
++        persist_snapshot_setup()
+         runtime_fd, runtime_identity = open_validated_directory(
+             child_paths["cargo-home-runtime"],
+             expected_uid=os.getuid(),
+diff --git a/scripts/ci/test_canonical_shell_wall_runner.py b/scripts/ci/test_canonical_shell_wall_runner.py
+index 37e4b2b2afd293904461a9f770c7ec6ebc5566f3..7cea62a8fe581f446fd43de8c4718b5ac11a1985 100644
+--- a/scripts/ci/test_canonical_shell_wall_runner.py
++++ b/scripts/ci/test_canonical_shell_wall_runner.py
+@@ -5840,6 +5840,41 @@ class CanonicalShellWallRunnerTests(unittest.TestCase):
+             "source_records",
+             runner.stage_a_main.__code__.co_varnames,
+         )
++        source = _module_source(runner).decode("utf-8")
++        stage_a_source = source[
++            source.index("def stage_a_main") : source.index(
++                "def validate_rustup_resolution"
++            )
++        ]
++        snapshot_setup = stage_a_source[
++            stage_a_source.index("construct_repository_snapshot(") :
++            stage_a_source.index("seal_snapshot_mounts(")
++        ]
++        for constructor in (
++            "construct_repository_snapshot(",
++            "construct_rustup_home_snapshot(",
++            "construct_cargo_home_seed(",
++            "construct_cargo_home_runtime(",
++        ):
++            constructor_at = snapshot_setup.index(constructor)
++            checkpoint_at = snapshot_setup.index(
++                "persist_snapshot_setup()",
++                constructor_at,
++            )
++            next_constructor_at = min(
++                (
++                    snapshot_setup.find(candidate, constructor_at + 1)
++                    for candidate in (
++                        "construct_repository_snapshot(",
++                        "construct_rustup_home_snapshot(",
++                        "construct_cargo_home_seed(",
++                        "construct_cargo_home_runtime(",
++                    )
++                    if snapshot_setup.find(candidate, constructor_at + 1) >= 0
++                ),
++                default=len(snapshot_setup),
++            )
++            self.assertLess(checkpoint_at, next_constructor_at)
+         self.assertEqual(
+             self.run_bounded_fixture("production-namespace-reference-scan"),
+             {"missing": 0, "own": True},
