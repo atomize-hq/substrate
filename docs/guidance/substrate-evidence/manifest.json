@@ -248,6 +248,16 @@
       "source_identity": "observed in canonical debug output; original source state and toolchain not independently established",
       "kind": "original compiler diagnostic; no-space failure",
       "publication_and_remote_verification": "separate from this record description"
+    },
+    {
+      "id": "integration-debug-cleanup-receipt",
+      "portable_destination": "cleanup-receipt-integration-debug.json",
+      "published_sha256": "af40c20f03b040c7a4f558d0eb206aa1562993c878bc984721102489345f4242",
+      "kind": "factual completed cleanup receipt; publication and remote verification pending",
+      "original_custody": "task05-integration-debug:action-and-independent-postcheck",
+      "source_identity": "integration source baseline 3dda500a630e7ab92186788b9a0641dc84a788b0",
+      "privacy": "logical root names and opaque local custody IDs; private originals remain local",
+      "publication_and_remote_verification": "pending"
     }
   ]
 }

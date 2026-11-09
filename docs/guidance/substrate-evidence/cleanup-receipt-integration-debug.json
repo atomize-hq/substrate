@@ -1,0 +1,111 @@
+{
+  "schema": "substrate-integration-debug-cleanup-receipt-v1",
+  "status": "selected integration debug cleanup completed; publication and remote verification of this receipt are pending",
+  "platform": "Linux x86_64",
+  "logical_roots": {
+    "integration checkout": "W: active integration worktree; protected local custody maps W to its actual path",
+    "canonical checkout": "C: source and evidence publication checkout; protected local custody maps C to its actual path"
+  },
+  "source_baseline_commit": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+  "source_recovery_url": "https://github.com/atomize-hq/substrate/tree/3dda500a630e7ab92186788b9a0641dc84a788b0",
+  "source_branch": "feat/internal-host-orchestrator-world-dispatch-bootstrap",
+  "action_time_source_and_docs_remote_ref": "e52bcf5146887849c8a1c7c74c1e2beb2aace55b",
+  "action_start_utc": "2026-11-09T21:42:20.634371+00:00",
+  "action_end_utc": "2026-11-09T21:42:21.504616+00:00",
+  "command_cwd": "integration checkout W",
+  "command_template": "sudo -n python3 $W/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task05/implementation/remove-frozen.py --gate $W/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task05/implementation/OWNER-gate.json --receipt $W/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task05/implementation/OWNER-action --execute",
+  "command_exit": 0,
+  "stdout_empty": true,
+  "stderr_empty": true,
+  "operator_sha256": "006d8177177307509036d60cd44d2273cf3825906f8b0a3b50754cf1e46b8c58",
+  "frozen_membership_sha256": "5cb65c6797b8e647721df5d23586bc45e9beae22100e5f88f8911b2d2433762c",
+  "frozen_selection_sha256": "0c371cf424b99e9a4cd1cccde769d57f9200d95c7114d69e139c64a2b33a14f5",
+  "immutable_pre_sha256": "f46047eb707ecbe1558d3c279435799ce829dd772e9e918b2b2cea32eb7cf5a1",
+  "durable_post_sha256": "37adb8ace6ce93759ef834b10debaa69a8743e7662e61f2dd12a89a2b3b44140",
+  "selected_descendants": 18840,
+  "removed_descendants": 18840,
+  "independent_selected_absence_count": 18840,
+  "action_completed": true,
+  "action_error": null,
+  "removed_names_sha256": "d15a73bfbd02f9ba8686d5c5206d73c4409bea51a00c0dd26f2f372b3ef76277",
+  "retained_debug_root": true,
+  "held_entries": 517,
+  "held_identity_and_regular_hash_checks_passed": true,
+  "unique_regular_file_inodes_removed": 16241,
+  "actual_exclusive_regular_allocated_bytes_removed": 10765107200,
+  "available_bytes_before": 201453912064,
+  "available_bytes_after": 212229681152,
+  "observed_available_bytes_delta": 10775769088,
+  "available_inodes_before": 45623053,
+  "available_inodes_after": 45641861,
+  "observed_available_inode_delta": 18808,
+  "accounting_note": "Actual unique regular-file allocation removed, observed filesystem free-space change and available inode change are distinct measurements. Directory blocks and concurrent filesystem activity affect the latter; the difference is not attributed solely to this action.",
+  "postcheck_utc": "2026-11-09T21:42:57.611195+00:00",
+  "postcheck": {
+    "selected_absent": true,
+    "remaining_debug_entries": 517,
+    "all_held_identity_and_regular_hashes_match_pre": true,
+    "actor_sha256": "565e2033a089dcbb48e1e4da9b28bea19fed9510918ef46b7f9c64afef3c9d62",
+    "actor_inode": 5549950,
+    "actor_mode": "0755",
+    "pinned_example_input_sha256": "f39974eb7bbe423d519ab0808369f3674335b48a5e5f0c4487e6572f44ab4136",
+    "pinned_actor_helpers_and_release_match_pre_action": true,
+    "protected_compiler_record_hashes_match": 85,
+    "all_frozen_candidate_hashes_match": true,
+    "integration_HEAD": "3dda500a630e7ab92186788b9a0641dc84a788b0",
+    "integration_tracked_edit": "docs/BACKLOG.md retained locally",
+    "integration_backlog_sha256": "2f199c8720cd47ec58ef7a5efbb4773fc8abfda99a65dfc4b46f395b1788a1ac",
+    "integration_index_clean": true,
+    "canonical_marker_unchanged": true
+  },
+  "pre_action_remote_verification": {
+    "started_utc": "2026-11-09T21:40:31.103376+00:00",
+    "ended_utc": "2026-11-09T21:40:33.637586+00:00",
+    "exact_remote_content_files": 20,
+    "all_content_hashes_match": true,
+    "directly_advertised_branch_ref": "e52bcf5146887849c8a1c7c74c1e2beb2aace55b",
+    "verification_method": "independent remote content retrieval and direct branch advertisement"
+  },
+  "pre_action_guard_results": {
+    "review_and_meta_target_clearance": "completed for exact frozen selection",
+    "direct_one_sudo_readonly_guard_exit": 0,
+    "process_checked_file_directory_and_root_inodes": 18810,
+    "selected_mount_or_alias_matches": 0,
+    "fresh_source_and_protected_reference_hashes_matched": 85,
+    "relative_reference_tuples_matched": 10,
+    "fresh_phase_allocated_bytes": 486486016,
+    "fresh_task05_allocated_bytes": 4902912,
+    "free_space_floors": "checked by owner before action; detailed observations retained in local custody"
+  },
+  "guard_development_failures": [
+    "An owner reference comparison initially failed because matching results arrived in a different order; all 10 source/hash/suffix tuples matched after unordered comparison before effects.",
+    "A nested-sudo read-only guard failed repository recognition because SUDO_UID was 0; the reviewed direct one-sudo read-only command then passed before effects. Neither failure changed the candidate or removed files."
+  ],
+  "private_original_records": {
+    "custody": "task05-integration-debug:three-original-record-archives-and-member-maps",
+    "archive_sha256": [
+      "d3a1282282b537708aff102dcc7d48858d2cc968d5656cc95d9c0ad11d73d47a",
+      "0fbdefb8576f0e263df8fb1dbe1cf7536c49742d61b9da2a176b69b3826e951e",
+      "b909ff3042dd5b64434b13e940dc802bb90b97ae56dc3ac32a18aef66410fd09"
+    ],
+    "member_manifest_sha256": [
+      "8c1ea10aeb2188889eb4fc64c2510b346f69fb092ce98f77cbd2efe5f44304bc",
+      "1d6710351a69b2194a27973d160704be9c83cdc59f75d18ae297c00ff2f8b3cc",
+      "8b2db6a81c427ba76b6c24f2f4782ddff6b521c14dd0e6a4014bbbaf626c6512"
+    ],
+    "scope": "Original small compiler records, generated text and diagnostics; member and source hashes matched before action.",
+    "privacy_and_recovery": "Restricted local custody only, not publication or off-host backup; preserve the member maps. Source recovery cannot recreate original observations."
+  },
+  "holds_and_limits": [
+    "The debug root and 517 entries remain, including the pinned actor, its aliases and parent directories, the pinned library example input, Cargo lock and referenced runtime/build paths.",
+    "World/Lane and enclosing E3 protected roots, helpers, private targets, shared source and records were not selected.",
+    "All release artifacts and other target children are outside this action. Three release artifacts differed from historical manifest hashes before action and matched their own pre-action observed state after action; that pre-existing correspondence gap remains.",
+    "Source and separately preserved unique inputs are needed for recovery. Historical build commands are unknown; the accepted future build recipe does not establish historical binary equivalence or future build success.",
+    "No product tests, builds, doctor, service, provider, installation or product qualification were performed. This receipt does not establish completion of the broader cleanup phase."
+  ],
+  "publication": {
+    "candidate_parent_commit": "e52bcf5146887849c8a1c7c74c1e2beb2aace55b",
+    "receipt_commit": "pending",
+    "remote_content_verification": "pending"
+  }
+}

@@ -3671,7 +3671,8 @@
       "observed_exists": true,
       "allocation_bytes": null,
       "reclaimable_bytes": null,
-      "status": "held pending group-specific source, records, ownership and live preflight"
+      "status": "selected integration debug descendants removed; debug root and 517 protected entries retained at postcheck",
+      "cleanup_receipt": "cleanup-receipt-integration-debug.json"
     },
     {
       "id": "inventory-355",

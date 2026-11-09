@@ -43,7 +43,7 @@ All allocations in historical records are point-in-time measurements, not curren
 
 1. **B1** compiler incremental files were removed across the initial and continuation actions, including the remaining locks and internal hardlinks.
 2. **B2** selected debug library archives and metadata were removed in the initial action; the remaining frozen debug outputs and root were removed in the continuation action. The [continuation receipt](cleanup-receipt-canonical-debug-continuation.json) records both the allocated-byte estimate and the observed filesystem change.
-3. **B3** integration checkout debug artifacts: later work only, with the frozen actor and all aliases, its World/Lane workflow, enclosing evidence and full dependency closure protected.
+3. **B3** selected integration debug outputs were removed; the debug root and 517 held entries, including the frozen actor, its aliases and pinned dependencies, remain. The [integration debug receipt](cleanup-receipt-integration-debug.json) records actual allocated bytes, separate filesystem observations and remaining holds. Publication and remote readback of this receipt update are pending.
 4. **B4** isolated inventory target: retain private original proof and source until selected and preserved.
 5. **B5** comparison roots: preserve each base/head source and original results; GitHub custody remains unverified.
 6. **B6** other repository and worktree candidates: preserve each remaining repository's exact source, changes, inputs and selected records, check ownership and remote restoration, and never infer eligibility from age or directory name.
