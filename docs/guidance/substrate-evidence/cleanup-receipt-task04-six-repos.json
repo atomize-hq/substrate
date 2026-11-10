@@ -1,0 +1,171 @@
+{
+  "kind": "factual source checkout cleanup receipt",
+  "source_publication": {
+    "commit": "e2370aaa96d9ea32ed53e55a1616a7bbc4080f81",
+    "tree": "0fa185dc8dfd1270df8b50ee20eff082545cc4e3",
+    "parent": "099c3f125c11562a71035f3a328c8ea0d04a307b",
+    "recovery": "records/task04-six-repos/public/recovery.md",
+    "remote_readback_proof": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/publication/six-seed-remote-verification.json",
+    "reconstruction_invocation": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/reconstruction-invocation.txt",
+    "reconstruction_output": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/reconstruction.out",
+    "reconstruction_output_sha256": "131fc33f82ddd4744d4bbb2f828fe226f31cd7af937e91081308dcad42e5142a",
+    "result": "Eight expected source commit and tree identities reconstructed from retrieved patches, verified base and held raw bodies; exit 0. This does not claim arbitrary original Git history or historical binaries."
+  },
+  "actions": [
+    {
+      "id": "repo-017",
+      "root": "/home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-evidence-merge-runrepo-20260725T025800Z",
+      "membership_sha256": "5d37ec37f3a91f59346de207ee7bd64b78a80f3de3e4d0bb2c64a46425c1a61e",
+      "allocated_regular_bytes": 63074304,
+      "action": {
+        "command": "rm -r --one-file-system -- /home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-evidence-merge-runrepo-20260725T025800Z",
+        "cwd": "/home/spenser/__Active_code/substrate",
+        "utc": "2026-11-09T23:53:42Z",
+        "exit": 0,
+        "root_absent": true
+      },
+      "raw_guard_action_custody": {
+        "archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-017-proof.tar.gz",
+        "sha256": "ac9bc81322df14992560f689b723a7a4417b566b50f9c970f28a197f4d470aa7",
+        "member_sha256_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-017-members.sha256"
+      }
+    },
+    {
+      "id": "repo-036",
+      "root": "/home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-stage-a-handoff-runrepo-20260725T020056Z",
+      "membership_sha256": "1746b0fc28ca880305cded75670936229c9c20afac220e68ec97b458e6bee2be",
+      "allocated_regular_bytes": 63062016,
+      "action": {
+        "command": "rm -r --one-file-system -- /home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-stage-a-handoff-runrepo-20260725T020056Z",
+        "cwd": "/home/spenser/__Active_code/substrate",
+        "utc": "2026-11-09T23:54:35Z",
+        "exit": 0,
+        "root_absent": true
+      },
+      "raw_guard_action_custody": {
+        "archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-036-proof.tar.gz",
+        "sha256": "7b13a78e66c2bbb26ddfffc9f5687c6f2b7221eaf6ca770332e64c144f065513",
+        "member_sha256_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-036-members.sha256"
+      }
+    },
+    {
+      "id": "repo-016",
+      "root": "/home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-cleanup-fix-runrepo-20260725T013710Z",
+      "membership_sha256": "437243f304d4750ebd181419d8c1b7b911ebb8509d0067fc6330cbf32e4b574d",
+      "allocated_regular_bytes": 63057920,
+      "action": {
+        "command": "rm -r --one-file-system -- /home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-cleanup-fix-runrepo-20260725T013710Z",
+        "cwd": "/home/spenser/__Active_code/substrate",
+        "utc": "2026-11-09T23:55:35Z",
+        "exit": 0,
+        "root_absent": true
+      },
+      "raw_guard_action_custody": {
+        "archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-016-proof.tar.gz",
+        "sha256": "98f010fcfa4dc2d2f7739bd70e89885c565dc8e5a3b15cff5a6c49ff2ce5803e",
+        "member_sha256_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-016-members.sha256"
+      }
+    },
+    {
+      "id": "repo-023",
+      "root": "/home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-rp3-full-runrepo-normalization-20260725T172605Z",
+      "membership_sha256": "30c436f0a10d75f44fb47cb4e26a74164698864e83e6ea9e4d57750389a04ca5",
+      "allocated_regular_bytes": 63062016,
+      "action": {
+        "command": "rm -r --one-file-system -- /home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-rp3-full-runrepo-normalization-20260725T172605Z",
+        "cwd": "/home/spenser/__Active_code/substrate",
+        "utc": "2026-11-09T23:57:15Z",
+        "exit": 0,
+        "root_absent": true
+      },
+      "raw_guard_action_custody": {
+        "archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-023-proof.tar.gz",
+        "sha256": "783725c715f91e504d889f5102d93d6b82b3b31ae585e4214f80d47cde803fce",
+        "member_sha256_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-023-members.sha256"
+      }
+    },
+    {
+      "id": "repo-025",
+      "root": "/home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-rp3-full-runrepo-stale-tests-20260725T164147Z",
+      "membership_sha256": "005e7006283aec100690302ddb7bef290f35e5078c30c43b10dca1a77fa557d3",
+      "allocated_regular_bytes": 63062016,
+      "action": {
+        "command": "rm -r --one-file-system -- /home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-rp3-full-runrepo-stale-tests-20260725T164147Z",
+        "cwd": "/home/spenser/__Active_code/substrate",
+        "utc": "2026-11-09T23:58:18Z",
+        "exit": 0,
+        "root_absent": true
+      },
+      "raw_guard_action_custody": {
+        "archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-025-proof.tar.gz",
+        "sha256": "6788cd4cc80c7359bd5233a236835e7e0d6ca36ae0c5d14331f3495529c0bfd8",
+        "member_sha256_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-025-members.sha256"
+      }
+    },
+    {
+      "id": "repo-024",
+      "root": "/home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-rp3-full-runrepo-selftest-fixed-20260725T162542Z",
+      "membership_sha256": "199dfaf6e78ec9bc7990b8cb2db84014e8761b0c210fae05e444ad3028aaac0b",
+      "allocated_regular_bytes": 63053824,
+      "action": {
+        "command": "rm -r --one-file-system -- /home/spenser/.cache/substrate-canonical-swap-artifacts/substrate-rp3-full-runrepo-selftest-fixed-20260725T162542Z",
+        "cwd": "/home/spenser/__Active_code/substrate",
+        "utc": "2026-11-09T23:59:14Z",
+        "exit": 0,
+        "root_absent": true
+      },
+      "raw_guard_action_custody": {
+        "archive": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-024-proof.tar.gz",
+        "sha256": "18522e5ef38cf2a099c4cfbf943e8b4cbe6ed140335248a5769233186232b67a",
+        "member_sha256_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/repo-024-members.sha256"
+      }
+    }
+  ],
+  "allocated_regular_bytes_total": 378372096,
+  "filesystem_observation": {
+    "first_action_before_host_available_bytes": 219385593856,
+    "last_action_after_host_available_bytes": 219770871808,
+    "first_action_before_free_inodes": 45766845,
+    "last_action_after_free_inodes": 45779167,
+    "limitation": "Host df and inode observations cover concurrent filesystem activity and are not attributed as reclaimed payload."
+  },
+  "custody": {
+    "git_records_manifest": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-candidate/private/SHA256SUMS",
+    "git_records_manifest_sha256": "d3fdc3465dcb8503129756318ce4e13e17977d14f18434028b8f4db39dbcff50",
+    "prior_c671_commit_body": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/four-repos-candidate/private/c6712d99.commit",
+    "prior_c671_commit_body_sha256": "2b5ebd5787a6f3a8aaf791f52a6362de5bcd11e0cb053e0ff44630893d2629a0",
+    "limitation": "Private Git records and commit bodies are held locally, not backed up off-host."
+  },
+  "guards_and_postchecks": {
+    "per_root": "Each action followed its own source, record, membership, reference, process, mount, link and separate privileged capacity checks. Raw commands, exits and results are in the named private per-root archives. These are point-in-time checks, not locks.",
+    "postchecks": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/postchecks.out",
+    "postchecks_sha256": "ae1a2065b94d18bd200177987844276879a35c4f569ec5df290e07a05a327c3c",
+    "postchecks_exit": 0,
+    "held": "The canonical-swap parent, protected World/Lane and E3 orchestration paths, protected actor and backlog passed recorded postchecks.",
+    "guard_script_versions": [
+      {
+        "roots": [
+          "repo-017",
+          "repo-036",
+          "repo-016"
+        ],
+        "path": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/final-guard-initial.sh",
+        "sha256": "f11182db9560b9ee46d148c9a455c3469480950ce76d1607815b7ccd1ebcf7c6"
+      },
+      {
+        "roots": [
+          "repo-023",
+          "repo-025",
+          "repo-024"
+        ],
+        "path": "/home/spenser/__Active_code/.worktrees/substrate-runtime-refactor-product-authority-integration/.codex/orchestration/substrate-evidence-consolidation-cleanup-20261109/evidence/task04/six-repos-actions/final-guard.sh",
+        "sha256": "0885cf30fe5f268afc94806466ca9a66f7f4b07c22c7a6bd398d4be4c576aeff"
+      }
+    ]
+  },
+  "limitations": [
+    "Historical local origin routes repo-017 to repo-036 to repo-016 and repo-023 to repo-025 to repo-024, and repo-024 to previously removed repo-022, require source and private metadata restoration or origin remapping before a future fetch.",
+    "The generated reconstruction scratch cleanup returned exit 0 and the path was absent afterward. Its shell group lacked errexit, so the final exit alone does not prove that each preceding guard expression succeeded; the recorded scratch contained generated index/objects and no original input.",
+    "Receipt and README publication and readback remain pending."
+  ]
+}

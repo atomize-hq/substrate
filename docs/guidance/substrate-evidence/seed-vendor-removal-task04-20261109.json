@@ -1,0 +1,45 @@
+{
+  "schema": "task04-seed-vendor-removal-v1",
+  "status": "completed",
+  "utc": "2026-11-09T23:52:46Z",
+  "scope": "/home/spenser/.cache/substrate-runtime-refactor/cargo-vendor-workspace-20260724T200614Z/seed/vendor",
+  "command": [
+    "rm",
+    "-r",
+    "--one-file-system",
+    "--",
+    "/home/spenser/.cache/substrate-runtime-refactor/cargo-vendor-workspace-20260724T200614Z/seed/vendor"
+  ],
+  "cwd": "/home/spenser/__Active_code/substrate",
+  "exit": 0,
+  "stdout_bytes": 0,
+  "stderr_bytes": 0,
+  "postcondition": "seed path absent; seed parent retained mode 0700 uid/gid 1000:1000",
+  "source_publication": {
+    "commit": "e2370aaa96d9ea32ed53e55a1616a7bbc4080f81",
+    "parent": "099c3f125c11562a71035f3a328c8ea0d04a307b",
+    "tree": "0fa185dc8dfd1270df8b50ee20eff082545cc4e3",
+    "actual_remote_proof_sha256": "0178af1ad5f27ef6d8538bdebec5f64f60025acb447aae55385dbb335f3fa641"
+  },
+  "pre_removal": {
+    "packages": 667,
+    "payload_files": 37896,
+    "checksum_records": 667,
+    "entries": 45713,
+    "regular_file_allocated_bytes": 959827968,
+    "all_entry_allocated_bytes": 989601792
+  },
+  "filesystem_observation": {
+    "root_available_before": 218396688384,
+    "root_available_after": 219385782272,
+    "root_available_delta": 989093888,
+    "root_free_inodes_before": 45721193,
+    "root_free_inodes_after": 45766866,
+    "note": "Filesystem deltas include directory blocks and concurrent activity; they are not the allocated regular-file sum."
+  },
+  "guards": "Fresh membership, metadata, payload, archive, checksum, lock, process, mount, scoped references and symlinks, custody, capacity and actual remote identity passed. Protected matches were unchanged historical audit and offline records. Checks are snapshots and do not prevent later starts.",
+  "postchecks": "All 752 retained archive hashes and metadata, registry index, 22 extra source directories, runner/source records, 1277 retained parent-file hashes, offline configs, protected matching files, actor and source records passed; original seed parent retained.",
+  "recovery": "Use seed-vendor-recovery-task04-20261109.md and its published catalog, checksum records and restorable metadata. Original crate archives are retained locally only; publication does not back up source payloads off-host. Restore before running historical offline consumers.",
+  "limits": "No historical source-ref completeness, registry availability, reproduction of historical binaries or build results, inode identity or ctime recreation is claimed. Six historical v1 skill files were absent from earlier reference scope.",
+  "task_scope": "Only this exact seed removal is complete; remaining Task04 and phase work are outside this receipt."
+}

@@ -71,3 +71,9 @@ Plan18's three changed source files were preserved by a [screened source package
 Six historical checkout roots have an [exact-source restoration mapping](records/task04-six-repos/public/recovery.md), using source patches and separately held private Git identity and records. Historical local origins may require restoring the referenced source and metadata or remapping before a future fetch. Local private custody is not an off-host backup. Any removal and its results require a later factual receipt.
 
 The [2026-11-09 seed vendor recovery guidance](seed-vendor-recovery-task04-20261109.md) supplies the successor route for original checksum records and vendor restoration if a separately published factual receipt records seed removal. Earlier seed-dependent recovery text describes the historical custody state; the seed and original crate archives remain local until that receipt says otherwise. Local crate-archive custody is not an off-host backup.
+
+### Seed vendor removal — 2026-11-09
+
+The separately authorized seed vendor removal completed. See the [factual receipt](seed-vendor-removal-task04-20261109.json) and [successor recovery guide](seed-vendor-recovery-task04-20261109.md). The original crate archives remain in local custody; restore the seed before future historical offline use.
+
+Six historical checkout roots were removed after their [source recovery mapping](records/task04-six-repos/public/recovery.md) was published and remotely verified at `e2370aaa96d9ea32ed53e55a1616a7bbc4080f81`. The [six-checkout cleanup receipt](cleanup-receipt-task04-six-repos.json) records each action and separates allocated regular bytes from filesystem observations. Original commit metadata and Git records remain in local private custody, which is not an off-host backup. Historical local origins require source and metadata restoration or remapping before future fetches. Publication and remote readback of this receipt and index update remain pending.
